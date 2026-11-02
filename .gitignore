@@ -1,0 +1,9 @@
+*.pdb
+*.obj
+*.log
+.vs/
+bin/
+obj/
+__pycache__/
+*.pyc
+
