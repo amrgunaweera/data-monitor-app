@@ -11,6 +11,7 @@ namespace NetPulse {
         public string IPv4Address { get; set; }
         public string MacAddress { get; set; }
         public string LinkSpeed { get; set; }
+        public string ConnectedNetworkName { get; set; }
 
         public double CurrentDownloadSpeed { get; set; } // Bytes/sec
         public double CurrentUploadSpeed { get; set; }   // Bytes/sec

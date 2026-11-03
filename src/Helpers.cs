@@ -38,31 +38,72 @@ namespace NetPulse {
         }
 
         public static string FormatSpeed(double bytesPerSec) {
-            return FormatBytes(bytesPerSec) + "/s";
+            string val, unit;
+            FormatSpeedParts(bytesPerSec, out val, out unit);
+            return val + " " + unit;
         }
 
         public static void FormatSpeedParts(double bytesPerSec, out string valueStr, out string unitStr) {
             if (bytesPerSec < 0) bytesPerSec = 0;
-            string[] units = new string[] { "B/s", "KB/s", "MB/s", "GB/s" };
-            int unitIndex = 0;
-            double value = bytesPerSec;
 
-            while (value >= 1024 && unitIndex < units.Length - 1) {
-                value /= 1024.0;
-                unitIndex++;
+            string mode = "Auto";
+            try {
+                if (AppSettings.Instance != null && !string.IsNullOrEmpty(AppSettings.Instance.SpeedUnitMode)) {
+                    mode = AppSettings.Instance.SpeedUnitMode;
+                }
+            } catch {}
+
+            if (mode == "Bits") {
+                string[] units = new string[] { "bps", "Kbps", "Mbps", "Gbps" };
+                int unitIndex = 0;
+                double value = bytesPerSec * 8.0;
+
+                while (value >= 1000 && unitIndex < units.Length - 1) {
+                    value /= 1000.0;
+                    unitIndex++;
+                }
+
+                if (unitIndex == 0) {
+                    valueStr = string.Format("{0:0}", value);
+                } else if (value >= 100) {
+                    valueStr = string.Format("{0:0}", value);
+                } else if (value >= 10) {
+                    valueStr = string.Format("{0:0.0}", value);
+                } else {
+                    valueStr = string.Format("{0:0.00}", value);
+                }
+                unitStr = units[unitIndex];
+                return;
             }
 
-            if (unitIndex == 0) {
-                valueStr = string.Format("{0:0}", value);
-            } else if (value >= 100) {
-                valueStr = string.Format("{0:0}", value);
-            } else if (value >= 10) {
-                valueStr = string.Format("{0:0.0}", value);
+            if (mode == "BytesOnly") {
+                double mb = bytesPerSec / (1024.0 * 1024.0);
+                valueStr = string.Format("{0:0.00}", mb);
+                unitStr = "MB/s";
+                return;
+            }
+
+            // Standard Auto B/s, KB/s, MB/s, GB/s
+            string[] byteUnits = new string[] { "B/s", "KB/s", "MB/s", "GB/s" };
+            int bUnitIndex = 0;
+            double bValue = bytesPerSec;
+
+            while (bValue >= 1024 && bUnitIndex < byteUnits.Length - 1) {
+                bValue /= 1024.0;
+                bUnitIndex++;
+            }
+
+            if (bUnitIndex == 0) {
+                valueStr = string.Format("{0:0}", bValue);
+            } else if (bValue >= 100) {
+                valueStr = string.Format("{0:0}", bValue);
+            } else if (bValue >= 10) {
+                valueStr = string.Format("{0:0.0}", bValue);
             } else {
-                valueStr = string.Format("{0:0.00}", value);
+                valueStr = string.Format("{0:0.00}", bValue);
             }
 
-            unitStr = units[unitIndex];
+            unitStr = byteUnits[bUnitIndex];
         }
 
         public static string FormatDuration(TimeSpan ts) {

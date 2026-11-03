@@ -8,8 +8,24 @@ namespace NetPulse {
         public static event Action ThemeChanged;
 
         static ThemeManager() {
-            // Default to Windows system preference
-            IsDark = !IsWindowsLightTheme();
+            SyncWithSettingsOrWindows();
+        }
+
+        public static void SyncWithSettingsOrWindows() {
+            string pref = "System";
+            try {
+                if (AppSettings.Instance != null && !string.IsNullOrEmpty(AppSettings.Instance.ThemePreference)) {
+                    pref = AppSettings.Instance.ThemePreference;
+                }
+            } catch {}
+
+            if (pref == "Dark") {
+                SetTheme(true);
+            } else if (pref == "Light") {
+                SetTheme(false);
+            } else {
+                SetTheme(!IsWindowsLightTheme());
+            }
         }
 
         public static bool IsWindowsLightTheme() {
@@ -162,6 +178,30 @@ namespace NetPulse {
 
         public static string StatusDisconnected {
             get { return IsDark ? "#6E7A9F" : "#94A3B8"; }
+        }
+
+        public static string TabActiveBg {
+            get { return IsDark ? "#2A244D" : "#EDE9FE"; }
+        }
+
+        public static string TabActiveFg {
+            get { return IsDark ? "#C4B5FD" : "#6D28D9"; }
+        }
+
+        public static string TabActiveBorder {
+            get { return IsDark ? "#7C3AED" : "#8B5CF6"; }
+        }
+
+        public static string TabInactiveBg {
+            get { return IsDark ? "#14192A" : "#F1F5F9"; }
+        }
+
+        public static string TabInactiveFg {
+            get { return IsDark ? "#8C96B8" : "#64748B"; }
+        }
+
+        public static string TabInactiveBorder {
+            get { return IsDark ? "#222A45" : "#CBD5E1"; }
         }
     }
 }
