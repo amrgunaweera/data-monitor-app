@@ -128,6 +128,12 @@ namespace NetPulse {
                     }
                 } catch {}
                 info.IPv4Address = string.IsNullOrEmpty(ipv4) ? "Not Assigned" : ipv4;
+
+                if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
+                    info.ConnectedNetworkName = WifiNetworkHelper.GetCurrentWifiSsid();
+                } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
+                    info.ConnectedNetworkName = null;
+                }
             }
         }
 
@@ -185,6 +191,26 @@ namespace NetPulse {
 
                         _globalStats.TotalSessionDownloaded += diffRecv;
                         _globalStats.TotalSessionUploaded += diffSent;
+
+                        // Persist historical daily usage with Wi-Fi network SSID
+                        string wifiSsid = null;
+                        if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
+                            wifiSsid = WifiNetworkHelper.GetCurrentWifiSsid();
+                            info.ConnectedNetworkName = wifiSsid;
+                        } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
+                            info.ConnectedNetworkName = null;
+                        }
+
+                        UsageStorage.Instance.RecordTraffic(
+                            info.Id,
+                            info.Name,
+                            info.InterfaceType,
+                            wifiSsid,
+                            diffRecv,
+                            diffSent,
+                            dlSpeed,
+                            ulSpeed
+                        );
                     }
                 } else {
                     info.HasBaseline = true;

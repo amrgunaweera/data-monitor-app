@@ -9,10 +9,15 @@ Write-Host "Compiling DataMonitor.exe with embedded icon, High-DPI manifest, and
 
 $sources = @(
     "src\Helpers.cs",
+    "src\AppSettings.cs",
+    "src\WifiNetworkHelper.cs",
     "src\ThemeManager.cs",
     "src\Models.cs",
+    "src\HistoryModels.cs",
+    "src\UsageStorage.cs",
     "src\NetworkMonitor.cs",
     "src\Controls\RealtimeChart.cs",
+    "src\Controls\HistoricalBarChart.cs",
     "src\Controls\InterfaceCardControl.cs",
     "src\MainWindow.cs",
     "src\Program.cs"
@@ -25,7 +30,7 @@ $args = @(
     "/win32manifest:app.manifest",
     "/out:DataMonitor.exe",
     "/lib:C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF,C:\Windows\Microsoft.NET\Framework64\v4.0.30319",
-    "/r:PresentationFramework.dll,PresentationCore.dll,WindowsBase.dll,System.Xaml.dll,System.dll,System.Core.dll,System.Drawing.dll"
+    "/r:PresentationFramework.dll,PresentationCore.dll,WindowsBase.dll,System.Xaml.dll,System.dll,System.Core.dll,System.Drawing.dll,System.Web.Extensions.dll,System.Windows.Forms.dll"
 ) + $sources
 
 & $csc $args
