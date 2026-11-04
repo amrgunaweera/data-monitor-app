@@ -144,24 +144,27 @@ namespace NetPulse {
 
                 using (Process proc = Process.Start(psi)) {
                     if (proc != null) {
-                        string output = proc.StandardOutput.ReadToEnd();
-                        proc.WaitForExit(1000);
-
-                        using (StringReader reader = new StringReader(output)) {
-                            string line;
-                            while ((line = reader.ReadLine()) != null) {
-                                string trimmed = line.Trim();
-                                if (trimmed.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) &&
-                                    !trimmed.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase)) {
-                                    int colonIdx = trimmed.IndexOf(':');
-                                    if (colonIdx >= 0 && colonIdx < trimmed.Length - 1) {
-                                        string ssid = trimmed.Substring(colonIdx + 1).Trim();
-                                        if (!string.IsNullOrEmpty(ssid)) {
-                                            return ssid;
+                        // Enforce non-blocking wait to prevent UI stall during Windows boot
+                        if (proc.WaitForExit(1000)) {
+                            string output = proc.StandardOutput.ReadToEnd();
+                            using (StringReader reader = new StringReader(output)) {
+                                string line;
+                                while ((line = reader.ReadLine()) != null) {
+                                    string trimmed = line.Trim();
+                                    if (trimmed.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) &&
+                                        !trimmed.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase)) {
+                                        int colonIdx = trimmed.IndexOf(':');
+                                        if (colonIdx >= 0 && colonIdx < trimmed.Length - 1) {
+                                            string ssid = trimmed.Substring(colonIdx + 1).Trim();
+                                            if (!string.IsNullOrEmpty(ssid)) {
+                                                return ssid;
+                                            }
                                         }
                                     }
                                 }
                             }
+                        } else {
+                            try { proc.Kill(); } catch {}
                         }
                     }
                 }
@@ -170,4 +173,3 @@ namespace NetPulse {
         }
     }
 }
-

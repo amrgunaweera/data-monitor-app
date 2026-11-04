@@ -2,11 +2,11 @@
 
 > **A native, zero-dependency Windows desktop network monitor, real-time bandwidth analyzer, persistent historical traffic tracker, and customizable system utility.**
 
-[![Platform](https://img.shields.io/badge/Platform-Windows_10_%2F_11_(x64%20%7C%20x86)-0078D4?style=for-the-badge&logo=windows)](https://microsoft.com)
+[![Platform](https://img.shields.io/badge/Platform-Windows_10_%2F_11_x64-0078D4?style=for-the-badge&logo=windows)](https://microsoft.com)
 [![Framework](https://img.shields.io/badge/.NET_Framework-4.8_WPF-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero_(Self--Contained)-success?style=for-the-badge)](#technical-architecture--specifications)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
-[![Privacy](https://img.shields.io/badge/Privacy-100%25_Offline_(Zero_Telemetry)-brightgreen?style=for-the-badge)](PRIVACY.md)
+[![Privacy](https://img.shields.io/badge/Privacy-Local_Data_(No_App_Telemetry)-brightgreen?style=for-the-badge)](PRIVACY.md)
 
 ---
 
@@ -34,11 +34,11 @@
 
 **NetPulse Monitor** is an enterprise-grade, high-performance Windows desktop application designed to provide comprehensive observability over local network interfaces (**Wi-Fi** and **Ethernet**). 
 
-Unlike typical modern utilities that rely on heavyweight web runtimes (such as Electron or Chromium Embedded Framework), NetPulse is engineered entirely with **native .NET Framework 4.8 and Windows Presentation Foundation (WPF)**. It compiles into a single, standalone, ultra-lean executable (`NetPulseMonitor.exe` / `DataMonitor.exe`) that executes instantly on any modern Windows 10 or Windows 11 installation with **zero external dependencies, zero package installations, and zero runtime setup**.
+Unlike typical modern utilities that rely on heavyweight web runtimes (such as Electron or Chromium Embedded Framework), NetPulse is engineered with **native .NET Framework 4.8 and Windows Presentation Foundation (WPF)**. The regular build produces a standalone executable (`NetPulseMonitor.exe` / `DataMonitor.exe`); the Microsoft Store build packages the x64 app as an MSIX for Store signing and distribution.
 
 ### Why NetPulse?
 * **Sub-Millisecond Speed & Efficiency:** Ultra-low resource footprint (< 0.5% CPU during high-speed transfers; ~40–60 MB RAM).
-* **100% Offline & Private:** Zero analytics, zero telemetry, zero crash reporters, and zero outbound network calls.
+* **Private Local Processing:** No app telemetry, analytics, advertising, or transmitted crash reports. Network identifiers, usage history, and diagnostic logs remain on the device unless the user exports a report.
 * **Persistent History:** Tracks daily, weekly, and monthly data consumption permanently across system reboots.
 * **SSID-Level Wi-Fi Attribution:** Differentiates Wi-Fi usage between distinct wireless networks (e.g., Home vs. Office vs. Mobile Hotspot).
 * **Hardware-Accelerated UI:** Custom Direct3D/WPF vector graphics supporting high-DPI displays (100% to 400% scaling).
@@ -82,7 +82,7 @@ Unlike typical modern utilities that rely on heavyweight web runtimes (such as E
 
 | Component | Specification |
 | :--- | :--- |
-| **Target Operating System** | Windows 10 (1607+), Windows 11 (all versions), 64-bit and 32-bit |
+| **Target Operating System** | Windows 10 version 1809 or later and Windows 11 (x64 MSIX) |
 | **Target Framework** | .NET Framework 4.8 (C# 5 Language Specification) |
 | **Graphics Subsystem** | WPF with Direct3D hardware rendering pipeline |
 | **DPI Awareness** | Per-Monitor V2 High-DPI Aware (declared in `app.manifest`) |
@@ -91,8 +91,8 @@ Unlike typical modern utilities that rely on heavyweight web runtimes (such as E
 | **Window Theming Integration** | Win32 DWM API P/Invoke (`DwmSetWindowAttribute`, attribute `DWMWA_USE_IMMERSIVE_DARK_MODE = 20`) |
 | **Shell Integration** | `System.Windows.Forms.NotifyIcon` for System Notification Area (Tray) |
 | **Serialization Engine** | `System.Web.Script.Serialization.JavaScriptSerializer` (native framework, zero JSON library dependencies) |
-| **Persistent Storage Path** | `%LOCALAPPDATA%\NetPulse\usage_history.json` & `settings.json` |
-| **Binary Output** | Self-contained Windows Executable (`DataMonitor.exe` / `NetPulseMonitor.exe`, ~150 KB) |
+| **Persistent Storage Path** | `%LOCALAPPDATA%\NetPulse\usage_history.json`, `settings.json`, and optional `startup_error.log` |
+| **Binary Output** | Standalone Windows executable or x64 MSIX (`NetPulseMonitor-2.1.0.0-x64.msix`) |
 
 ---
 
@@ -143,8 +143,6 @@ The Usage History view provides retrospective analytics over recorded data:
   * Scrollable chronological table displaying every day's date, formatted download, upload, and combined total data.
 * **One-Click CSV Export:**
   * Generates clean, standard `.csv` spreadsheet files with structured sections for daily logs, overall summaries, and Wi-Fi network breakdowns.
-* **Realistic Sample Data Generator (`🎲 Sample Data`):**
-  * Generates 45 days of realistic, multi-network data with weekday/weekend distribution patterns for testing and demonstrations.
 
 ---
 
@@ -201,7 +199,7 @@ The Settings tab (`BuildSettingsView`) provides deep control over the applicatio
 
 | Setting Category | Control | Description |
 | :--- | :--- | :--- |
-| **System & Startup** | **Run on Windows Startup** | Registers the application in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` for auto-launch on Windows login. |
+| **System & Startup** | **Run on Windows Startup** | The standalone build can register a per-user Windows startup entry and shortcut. This option is disabled in the Microsoft Store MSIX build. |
 | | **Start Minimized** | Launches NetPulse hidden in the notification area on system boot. |
 | | **Minimize to System Tray on Close** | Prevents window close (`WM_CLOSE`) from terminating the process; hides the window and docks into the taskbar tray to keep background recording active. |
 | | **Always on Top (Floating Window)** | Toggles the `Topmost` window property so NetPulse remains visible over games, IDEs, and fullscreen browsers. |
@@ -323,14 +321,16 @@ When submitting **NetPulse Monitor** to the **Microsoft Store via Windows Partne
 
 | Partner Center Property | Recommended Value |
 | :--- | :--- |
-| **Product Type** | MSIX or packaged/standalone Windows App (Win32) |
+| **Product Type** | MSIX (Store-signed on submission) or trusted-certificate-signed Win32 installer (EXE/MSI) |
 | **Primary Category** | **Utilities & tools** |
 | **Subcategory** | **System & performance** *(or **Networking & connectivity**)* |
 | **Secondary Category** | **Developer tools** (Subcategory: *Networking*) — *or* **Productivity** |
-| **Content Rating** | All Ages (No age-restricted content, zero personal data processing) |
+| **Content Rating** | All Ages (No age-restricted content; network identifiers are processed locally) |
 | **Pricing & Availability** | Free / Open Source |
 | **Search Keywords** | `network monitor`, `bandwidth monitor`, `data usage tracker`, `wifi monitor`, `internet speed meter`, `traffic monitor`, `ssid tracker`, `daily data usage` |
 | **Privacy Policy URL** | Link to [`PRIVACY.md`](PRIVACY.md) in your public repository |
+
+The standalone `NetPulseMonitor.exe` produced by the regular build is not an installer and does not pass Partner Center's silent-install or Add/Remove Programs checks. For a Win32 submission, build and upload the installer described below. It registers the app name and publisher, supports quiet install and uninstall, and installs per user without requiring elevation. Set the publisher to the exact publisher identity shown in Partner Center. Both the app executable and installer are signed with a trusted code-signing certificate before submission.
 
 ---
 
@@ -341,6 +341,33 @@ NetPulse is designed to build directly using the native C# compiler (`csc.exe`) 
 ### Prerequisites
 * Windows 10 or Windows 11.
 * Microsoft .NET Framework 4.8 runtime (built into all modern Windows systems).
+* Windows SDK (including MakeAppx) for MSIX packaging.
+
+### Microsoft Store Win32 Installer
+Install Inno Setup 6 and the Windows SDK SignTool. Install your code-signing certificate in the Current User `Personal` certificate store, then set the exact Partner Center publisher name and certificate thumbprint:
+```powershell
+$env:NETPULSE_STORE_PUBLISHER = "Exact Store publisher name"
+$env:NETPULSE_SIGN_CERT_SHA1 = "Certificate thumbprint"
+.\build-store.ps1
+```
+The script signs both the app executable and the installer and writes the setup to `artifacts\store\NetPulseMonitor-Setup-x64.exe`. If SignTool or Inno Setup is outside the standard install location, set `NETPULSE_SIGNTOOL` or `INNO_SETUP_COMPILER` to its path. Configure Partner Center's silent install command as:
+```text
+/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+```
+The Inno Setup uninstaller supports quiet removal with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`.
+
+### Microsoft Store MSIX
+For a certificate-free Store submission, install the Windows SDK and use the exact identity values reserved in Partner Center. The Store signs the package during submission; do not self-sign it.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-msix.ps1 `
+  -IdentityName "amrg-projects.NetPlusMonitor" `
+  -IdentityPublisher "CN=86D97629-174B-46ED-8787-814914FDD587" `
+  -DisplayName "Net Plus Monitor" `
+  -PublisherDisplayName "amrg-projects"
+```
+The unsigned package is written to `artifacts\msix\NetPulseMonitor-2.1.0.0-x64.msix`. Partner Center's Package Identity Name, Identity Publisher, and publisher display name must match exactly. The MSIX build disables the unsupported registry-based startup option; regular EXE builds retain it.
+
+In Partner Center, target the Windows Desktop device family only; this MSIX does not support Xbox. The `runFullTrust` restricted capability is required for the WPF desktop app, so request its approval in the submission rather than removing it from the manifest.
 
 ### Option 1: 1-Click Batch Build
 Double-click `build.bat` in the repository root:
@@ -372,6 +399,10 @@ data-monitor-app/
 ├── app.manifest                 # Win32 Application Manifest (Per-Monitor V2 High-DPI & OS targeting)
 ├── build.bat                    # 1-click Windows Batch build script
 ├── build.ps1                    # Automated PowerShell compilation script
+├── build-store.ps1              # Signed Win32 installer build
+├── build-msix.ps1               # Unsigned MSIX build for Store signing
+├── store-installer.iss          # Inno Setup Win32 installer definition
+├── msix/AppxManifest.xml        # MSIX manifest template
 ├── PRIVACY.md                   # Complete Privacy Policy for Microsoft Store submission
 ├── README.md                    # Full technical specification & documentation
 │
@@ -396,9 +427,9 @@ data-monitor-app/
 
 ## 🔒 Privacy & Security
 
-* **No Packet Capture / Inspection:** NetPulse reads high-level byte counters from OS-provided kernel counters (`IPInterfaceStatistics`). It never inspects packet payloads, headers, or visited websites.
-* **No Network Transmissions:** The application contains zero network client libraries (`HttpClient`, `WebClient`, or raw sockets). It cannot transmit telemetry even if it wanted to.
-* **User Control:** Users can view the exact storage location, export all data to CSV, or wipe all records with a single click.
+* **No Packet Capture / Inspection:** NetPulse reads high-level byte counters and connection identifiers from Windows. It never inspects packet payloads, visited URLs, or communications.
+* **Local Data Only:** SSIDs, usage history, settings, and startup exception details are stored locally. NetPulse does not send this information to developer or analytics servers.
+* **User Control:** Users can view the storage location, export usage history and SSID breakdowns to CSV, clear usage history, or delete the local data folder. Uninstalling the MSIX may leave this external data folder in place.
 * For the full legal text, review [`PRIVACY.md`](PRIVACY.md).
 
 ---

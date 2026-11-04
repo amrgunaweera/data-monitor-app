@@ -1,3 +1,8 @@
+param(
+    [string]$OutputDirectory = ".",
+    [switch]$MsixPackage
+)
+
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 if (-not (Test-Path $csc)) {
@@ -6,6 +11,11 @@ if (-not (Test-Path $csc)) {
 }
 
 Write-Host "Compiling DataMonitor.exe with embedded icon, High-DPI manifest, and ThemeManager..." -ForegroundColor Cyan
+
+$OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$dataMonitorPath = Join-Path $OutputDirectory "DataMonitor.exe"
+$netPulseMonitorPath = Join-Path $OutputDirectory "NetPulseMonitor.exe"
 
 $sources = @(
     "src\Helpers.cs",
@@ -28,16 +38,21 @@ $args = @(
     "/optimize+",
     "/win32icon:app.ico",
     "/win32manifest:app.manifest",
-    "/out:DataMonitor.exe",
+    "/out:$dataMonitorPath",
     "/lib:C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF,C:\Windows\Microsoft.NET\Framework64\v4.0.30319",
     "/r:PresentationFramework.dll,PresentationCore.dll,WindowsBase.dll,System.Xaml.dll,System.dll,System.Core.dll,System.Drawing.dll,System.Web.Extensions.dll,System.Windows.Forms.dll"
 ) + $sources
 
+if ($MsixPackage) {
+    $args += "/define:MSIX_PACKAGE"
+}
+
 & $csc $args
 
 if ($LASTEXITCODE -eq 0) {
-    Copy-Item DataMonitor.exe NetPulseMonitor.exe -Force
-    Write-Host "[SUCCESS] DataMonitor.exe and NetPulseMonitor.exe compiled successfully!" -ForegroundColor Green
+    Copy-Item $dataMonitorPath $netPulseMonitorPath -Force
+    Write-Host "[SUCCESS] DataMonitor.exe and NetPulseMonitor.exe compiled successfully in $OutputDirectory" -ForegroundColor Green
 } else {
     Write-Host "[ERROR] Compilation failed with exit code $LASTEXITCODE" -ForegroundColor Red
+    exit $LASTEXITCODE
 }

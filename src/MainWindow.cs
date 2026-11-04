@@ -96,7 +96,6 @@ namespace NetPulse {
         private TextBlock _historyRangeBadgeText;
         private Border _historyRangeBadge;
         private Button _exportCsvBtn;
-        private Button _demoDataBtn;
         private Button _clearHistoryBtn;
 
         private Border _hTotalCard;
@@ -184,16 +183,16 @@ namespace NetPulse {
         private Button _settingsClearDataBtn;
 
         public MainWindow() {
-            Title = "⚡ NetPulse — Windows Network Data Monitor & History";
+            Title = "NetPulse — Windows Network Data Monitor & History";
             Width = 1160;
             Height = 850;
             MinWidth = 980;
             MinHeight = 690;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            if (System.IO.File.Exists("app.ico")) {
+            string icoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico"); if (System.IO.File.Exists(icoPath)) {
                 try {
-                    Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(System.IO.Path.GetFullPath("app.ico")));
+                    Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(icoPath));
                 } catch {}
             }
 
@@ -231,8 +230,8 @@ namespace NetPulse {
         private void SetupTrayIcon() {
             try {
                 _trayIcon = new System.Windows.Forms.NotifyIcon();
-                if (File.Exists("app.ico")) {
-                    _trayIcon.Icon = new System.Drawing.Icon("app.ico");
+                string trayIcoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico"); if (File.Exists(trayIcoPath)) {
+                    _trayIcon.Icon = new System.Drawing.Icon(trayIcoPath);
                 } else {
                     _trayIcon.Icon = System.Drawing.SystemIcons.Application;
                 }
@@ -275,6 +274,16 @@ namespace NetPulse {
             OnTimerTick(null, null);
             RefreshHistoryView();
             RefreshSettingsView();
+            if (AppSettings.Instance.StartMinimized) {
+                if (AppSettings.Instance.CloseToTray) {
+                    Hide();
+                    if (_trayIcon != null) {
+                        _trayIcon.ShowBalloonTip(2000, "NetPulse Running in Background", "NetPulse is minimized to the system tray and continuing to monitor your data.", System.Windows.Forms.ToolTipIcon.Info);
+                    }
+                } else {
+                    WindowState = WindowState.Minimized;
+                }
+            }
         }
 
         private void OnWindowClosing(object sender, System.ComponentModel.CancelEventArgs e) {
@@ -444,9 +453,6 @@ namespace NetPulse {
             _exportCsvBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
             _exportCsvBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
 
-            _demoDataBtn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
-            _demoDataBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
-            _demoDataBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
 
             _clearHistoryBtn.Background = Helpers.BrushFromHex(ThemeManager.ResetBtnBg);
             _clearHistoryBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ResetBtnFg);
@@ -584,12 +590,6 @@ namespace NetPulse {
             StackPanel titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             StackPanel logoRow = new StackPanel { Orientation = Orientation.Horizontal };
 
-            TextBlock logoIcon = new TextBlock {
-                Text = "⚡",
-                FontSize = 24,
-                Margin = new Thickness(0, 0, 8, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            };
             _titleText = new TextBlock {
                 Text = "NetPulse Monitor",
                 FontWeight = FontWeights.Bold,
@@ -610,7 +610,6 @@ namespace NetPulse {
             };
             _versionBadge.Child = _versionBadgeText;
 
-            logoRow.Children.Add(logoIcon);
             logoRow.Children.Add(_titleText);
             logoRow.Children.Add(_versionBadge);
 
@@ -1067,17 +1066,6 @@ namespace NetPulse {
             _exportCsvBtn.Click += OnExportCsvClicked;
             rightActions.Children.Add(_exportCsvBtn);
 
-            _demoDataBtn = new Button {
-                Content = "🎲 Sample Data",
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(10, 5, 10, 5),
-                Margin = new Thickness(0, 0, 8, 0),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                FontSize = 11
-            };
-            _demoDataBtn.Click += OnDemoDataClicked;
-            rightActions.Children.Add(_demoDataBtn);
-
             _clearHistoryBtn = new Button {
                 Content = "🗑 Clear",
                 BorderThickness = new Thickness(1),
@@ -1416,6 +1404,11 @@ namespace NetPulse {
                     AppSettings.Instance.RunOnStartup = isChecked;
                     AppSettings.Instance.Save();
                 });
+#if MSIX_PACKAGE
+            _runStartupCheck.IsEnabled = false;
+            _runStartupCheck.IsChecked = false;
+            _runStartupCheck.ToolTip = "Unavailable in the Microsoft Store package.";
+#endif
             sysSp.Children.Add(_runStartupCheck);
 
             _startMinimizedCheck = CreateSettingsCheckBox("Start Minimized",
@@ -2162,21 +2155,6 @@ namespace NetPulse {
                 } else {
                     MessageBox.Show("Could not export CSV file. Please check permissions.", "Export Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
-            }
-        }
-
-        private void OnDemoDataClicked(object sender, RoutedEventArgs e) {
-            MessageBoxResult res = MessageBox.Show(
-                "Populate 45 days of realistic sample network data to preview Last Week, Last Month, and analytics charts?",
-                "Generate Sample History",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (res == MessageBoxResult.Yes) {
-                UsageStorage.Instance.GenerateSampleData();
-                RefreshHistoryView();
-                RefreshQuotaVisualizer();
-                MessageBox.Show("Sample history generated! Explore 'Last Week', 'Last Month', and 'All Time' filters to see the data.", "Sample Data Loaded", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 

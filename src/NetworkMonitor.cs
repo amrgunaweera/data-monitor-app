@@ -93,47 +93,71 @@ namespace NetPulse {
                 return;
             }
 
+            if (nics == null) return;
+
             for (int i = 0; i < nics.Length; i++) {
-                NetworkInterface nic = nics[i];
-                if (IsIgnoredInterface(nic)) continue;
-
-                string type = ClassifyType(nic);
-                if (type != "Wi-Fi" && type != "Ethernet") continue;
-
-                InterfaceInfo info;
-                if (!_interfaces.TryGetValue(nic.Id, out info)) {
-                    info = new InterfaceInfo {
-                        Id = nic.Id,
-                        Name = nic.Name,
-                        Description = nic.Description,
-                        InterfaceType = type
-                    };
-                    _interfaces[nic.Id] = info;
-                }
-
-                // Update status and link info
-                info.IsConnected = (nic.OperationalStatus == OperationalStatus.Up);
-                info.LinkSpeed = Helpers.FormatLinkSpeed(nic.Speed);
-                info.MacAddress = FormatMacAddress(nic.GetPhysicalAddress());
-
-                // Fetch IPv4
-                string ipv4 = "";
                 try {
-                    IPInterfaceProperties ipProps = nic.GetIPProperties();
-                    foreach (UnicastIPAddressInformation u in ipProps.UnicastAddresses) {
-                        if (u.Address.AddressFamily == AddressFamily.InterNetwork) {
-                            ipv4 = u.Address.ToString();
-                            break;
+                    NetworkInterface nic = nics[i];
+                    if (nic == null || IsIgnoredInterface(nic)) continue;
+
+                    string type = ClassifyType(nic);
+                    if (type != "Wi-Fi" && type != "Ethernet") continue;
+
+                    InterfaceInfo info;
+                    if (!_interfaces.TryGetValue(nic.Id, out info)) {
+                        info = new InterfaceInfo {
+                            Id = nic.Id,
+                            Name = nic.Name,
+                            Description = nic.Description,
+                            InterfaceType = type
+                        };
+                        _interfaces[nic.Id] = info;
+                    }
+
+                    // Update status and link info safely (prevent driver init exceptions during boot)
+                    try {
+                        info.IsConnected = (nic.OperationalStatus == OperationalStatus.Up);
+                    } catch {
+                        info.IsConnected = false;
+                    }
+
+                    try {
+                        info.LinkSpeed = Helpers.FormatLinkSpeed(nic.Speed);
+                    } catch {
+                        info.LinkSpeed = "Unknown";
+                    }
+
+                    try {
+                        info.MacAddress = FormatMacAddress(nic.GetPhysicalAddress());
+                    } catch {
+                        info.MacAddress = "Unknown";
+                    }
+
+                    // Fetch IPv4
+                    string ipv4 = "";
+                    try {
+                        IPInterfaceProperties ipProps = nic.GetIPProperties();
+                        if (ipProps != null && ipProps.UnicastAddresses != null) {
+                            foreach (UnicastIPAddressInformation u in ipProps.UnicastAddresses) {
+                                if (u.Address.AddressFamily == AddressFamily.InterNetwork) {
+                                    ipv4 = u.Address.ToString();
+                                    break;
+                                }
+                            }
                         }
+                    } catch {}
+                    info.IPv4Address = string.IsNullOrEmpty(ipv4) ? "Not Assigned" : ipv4;
+
+                    if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
+                        try {
+                            info.ConnectedNetworkName = WifiNetworkHelper.GetCurrentWifiSsid();
+                        } catch {
+                            info.ConnectedNetworkName = "Wi-Fi Network";
+                        }
+                    } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
+                        info.ConnectedNetworkName = null;
                     }
                 } catch {}
-                info.IPv4Address = string.IsNullOrEmpty(ipv4) ? "Not Assigned" : ipv4;
-
-                if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
-                    info.ConnectedNetworkName = WifiNetworkHelper.GetCurrentWifiSsid();
-                } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
-                    info.ConnectedNetworkName = null;
-                }
             }
         }
 
@@ -146,80 +170,101 @@ namespace NetPulse {
                 return;
             }
 
+            if (nics == null) return;
+
             double totalDlSpeed = 0;
             double totalUlSpeed = 0;
 
             for (int i = 0; i < nics.Length; i++) {
-                NetworkInterface nic = nics[i];
-                InterfaceInfo info;
-                if (!_interfaces.TryGetValue(nic.Id, out info)) {
-                    continue;
-                }
-
-                info.IsConnected = (nic.OperationalStatus == OperationalStatus.Up);
-                info.LinkSpeed = Helpers.FormatLinkSpeed(nic.Speed);
-
-                IPInterfaceStatistics stats = null;
                 try {
-                    stats = nic.GetIPStatistics();
-                } catch {
-                    continue;
-                }
+                    NetworkInterface nic = nics[i];
+                    if (nic == null) continue;
 
-                long curRecv = stats.BytesReceived;
-                long curSent = stats.BytesSent;
-
-                if (info.HasBaseline) {
-                    double elapsed = (now - info.LastUpdated).TotalSeconds;
-                    if (elapsed > 0.1) {
-                        long diffRecv = curRecv - info.LastBytesReceived;
-                        long diffSent = curSent - info.LastBytesSent;
-
-                        // Account for potential reset/overflow
-                        if (diffRecv < 0) diffRecv = 0;
-                        if (diffSent < 0) diffSent = 0;
-
-                        double dlSpeed = diffRecv / elapsed;
-                        double ulSpeed = diffSent / elapsed;
-
-                        info.PushSpeed(dlSpeed, ulSpeed);
-                        info.SessionDownloaded += diffRecv;
-                        info.SessionUploaded += diffSent;
-
-                        totalDlSpeed += dlSpeed;
-                        totalUlSpeed += ulSpeed;
-
-                        _globalStats.TotalSessionDownloaded += diffRecv;
-                        _globalStats.TotalSessionUploaded += diffSent;
-
-                        // Persist historical daily usage with Wi-Fi network SSID
-                        string wifiSsid = null;
-                        if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
-                            wifiSsid = WifiNetworkHelper.GetCurrentWifiSsid();
-                            info.ConnectedNetworkName = wifiSsid;
-                        } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
-                            info.ConnectedNetworkName = null;
-                        }
-
-                        UsageStorage.Instance.RecordTraffic(
-                            info.Id,
-                            info.Name,
-                            info.InterfaceType,
-                            wifiSsid,
-                            diffRecv,
-                            diffSent,
-                            dlSpeed,
-                            ulSpeed
-                        );
+                    InterfaceInfo info;
+                    if (!_interfaces.TryGetValue(nic.Id, out info)) {
+                        continue;
                     }
-                } else {
-                    info.HasBaseline = true;
-                    info.PushSpeed(0, 0);
-                }
 
-                info.LastBytesReceived = curRecv;
-                info.LastBytesSent = curSent;
-                info.LastUpdated = now;
+                    try {
+                        info.IsConnected = (nic.OperationalStatus == OperationalStatus.Up);
+                    } catch {
+                        info.IsConnected = false;
+                    }
+
+                    try {
+                        info.LinkSpeed = Helpers.FormatLinkSpeed(nic.Speed);
+                    } catch {
+                        info.LinkSpeed = "Unknown";
+                    }
+
+                    IPInterfaceStatistics stats = null;
+                    try {
+                        stats = nic.GetIPStatistics();
+                    } catch {
+                        continue;
+                    }
+
+                    if (stats == null) continue;
+
+                    long curRecv = stats.BytesReceived;
+                    long curSent = stats.BytesSent;
+
+                    if (info.HasBaseline) {
+                        double elapsed = (now - info.LastUpdated).TotalSeconds;
+                        if (elapsed > 0.1) {
+                            long diffRecv = curRecv - info.LastBytesReceived;
+                            long diffSent = curSent - info.LastBytesSent;
+
+                            // Account for potential reset/overflow
+                            if (diffRecv < 0) diffRecv = 0;
+                            if (diffSent < 0) diffSent = 0;
+
+                            double dlSpeed = diffRecv / elapsed;
+                            double ulSpeed = diffSent / elapsed;
+
+                            info.PushSpeed(dlSpeed, ulSpeed);
+                            info.SessionDownloaded += diffRecv;
+                            info.SessionUploaded += diffSent;
+
+                            totalDlSpeed += dlSpeed;
+                            totalUlSpeed += ulSpeed;
+
+                            _globalStats.TotalSessionDownloaded += diffRecv;
+                            _globalStats.TotalSessionUploaded += diffSent;
+
+                            // Persist historical daily usage with Wi-Fi network SSID
+                            string wifiSsid = null;
+                            if (info.InterfaceType == "Wi-Fi" && info.IsConnected) {
+                                try {
+                                    wifiSsid = WifiNetworkHelper.GetCurrentWifiSsid();
+                                } catch {
+                                    wifiSsid = "Wi-Fi Network";
+                                }
+                                info.ConnectedNetworkName = wifiSsid;
+                            } else if (info.InterfaceType == "Wi-Fi" && !info.IsConnected) {
+                                info.ConnectedNetworkName = null;
+                            }
+
+                            UsageStorage.Instance.RecordTraffic(
+                                info.Id,
+                                info.Name,
+                                info.InterfaceType,
+                                wifiSsid,
+                                diffRecv,
+                                diffSent,
+                                dlSpeed,
+                                ulSpeed
+                            );
+                        }
+                    } else {
+                        info.HasBaseline = true;
+                        info.PushSpeed(0, 0);
+                    }
+
+                    info.LastBytesReceived = curRecv;
+                    info.LastBytesSent = curSent;
+                    info.LastUpdated = now;
+                } catch {}
             }
 
             _globalStats.PushSpeed(totalDlSpeed, totalUlSpeed);
@@ -234,4 +279,3 @@ namespace NetPulse {
         }
     }
 }
-
