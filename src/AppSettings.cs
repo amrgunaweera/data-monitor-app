@@ -23,6 +23,9 @@ namespace NetPulse {
 
         public string ThemePreference { get; set; } // "System", "Dark", "Light"
 
+        public bool EnableVisitedSitesHistory { get; set; }
+        public bool IncludeVisitedSitesInExport { get; set; }
+
         public SettingsData() {
             RunOnStartup = false;
             StartMinimized = false;
@@ -38,6 +41,9 @@ namespace NetPulse {
             QuotaResetDay = 1;
 
             ThemePreference = "System";
+
+            EnableVisitedSitesHistory = true;
+            IncludeVisitedSitesInExport = true;
         }
     }
 
@@ -118,6 +124,16 @@ namespace NetPulse {
         public string ThemePreference {
             get { return _data.ThemePreference; }
             set { _data.ThemePreference = value; }
+        }
+
+        public bool EnableVisitedSitesHistory {
+            get { return _data.EnableVisitedSitesHistory; }
+            set { _data.EnableVisitedSitesHistory = value; }
+        }
+
+        public bool IncludeVisitedSitesInExport {
+            get { return _data.IncludeVisitedSitesInExport; }
+            set { _data.IncludeVisitedSitesInExport = value; }
         }
 
         public string SettingsFilePath {

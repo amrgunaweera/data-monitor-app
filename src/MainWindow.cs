@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Input;
 using Microsoft.Win32;
 using NetPulse.Controls;
 
@@ -96,7 +97,6 @@ namespace NetPulse {
         private TextBlock _historyRangeBadgeText;
         private Border _historyRangeBadge;
         private Button _exportCsvBtn;
-        private Button _clearHistoryBtn;
 
         private Border _hTotalCard;
         private TextBlock _hTotalTitle;
@@ -141,10 +141,44 @@ namespace NetPulse {
         private TextBlock _wifiNetworksCountBadgeText;
         private Border _wifiNetworksCountBadge;
         private StackPanel _wifiNetworksListPanel;
+        private string _selectedWifiSsid = null;
+        private Button _clearWifiFilterBtn;
+
+        // ── SELECTED NETWORK INSPECTOR (RIGHT PANEL) ──
+        private Border _selectedNetworkInspectorCard;
+        private TextBlock _inspectorSsidTitle;
+        private Border _inspectorStatusBadge;
+        private TextBlock _inspectorStatusText;
+        private TextBlock _inspectorTotalText;
+        private TextBlock _inspectorDlUlText;
+        private TextBlock _inspectorPeakSpeedText;
+        private TextBlock _inspectorShareText;
+        private Button _inspectorClearBtn;
 
         private Border _tableCard;
-        private TextBlock _tableTitleText;
         private StackPanel _tableRowsPanel;
+
+
+        // ── HISTORY SUB-VIEW (RIGHT PANEL): 0 = Daily Log, 1 = Visited Sites ──
+        private int _historySubViewIndex = 0;
+        private Button _tabDailyTrafficBtn;
+        private Button _tabVisitedSitesBtn;
+        private Grid _dailyTrafficViewGrid;
+        private Grid _visitedSitesViewGrid;
+
+        // ── VISITED SITES CONTROLS ──
+        private TextBox _siteSearchBox;
+        private ComboBox _browserFilterCombo;
+        private Button _refreshSitesBtn;
+        private Button _exportSitesCsvBtn;
+        private StackPanel _visitedSitesRowsPanel;
+        private TextBlock _visitedSitesSummaryText;
+        private List<VisitedSiteRecord> _currentVisitedSites = new List<VisitedSiteRecord>();
+
+        // ── SETTINGS: VISITED SITES ──
+        private CheckBox _enableVisitedSitesCheck;
+        private CheckBox _includeVisitedSitesCsvCheck;
+        private Button _refreshVisitedSitesSettingsBtn;
 
         // ── SETTINGS VIEW ELEMENTS ──
         private readonly List<Border> _settingsCards = new List<Border>();
@@ -352,6 +386,10 @@ namespace NetPulse {
             _historyViewGrid.Visibility = (_currentTab == 1) ? Visibility.Visible : Visibility.Collapsed;
             _settingsViewScroll.Visibility = (_currentTab == 2) ? Visibility.Visible : Visibility.Collapsed;
 
+            if (_liveBadge != null) {
+                _liveBadge.Visibility = (_currentTab == 0) ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             ApplyTabButtonStyles();
 
             if (_currentTab == 1) {
@@ -453,11 +491,6 @@ namespace NetPulse {
             _exportCsvBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
             _exportCsvBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
 
-
-            _clearHistoryBtn.Background = Helpers.BrushFromHex(ThemeManager.ResetBtnBg);
-            _clearHistoryBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ResetBtnFg);
-            _clearHistoryBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ResetBtnBorder);
-
             StyleHistoryKpiCard(_hTotalCard, _hTotalTitle, _hTotalValText, _hTotalSubText, ThemeManager.TotalColor);
             StyleHistoryKpiCard(_hDlCard, _hDlTitle, _hDlValText, _hDlSubText, ThemeManager.DownloadColor);
             StyleHistoryKpiCard(_hUlCard, _hUlTitle, _hUlValText, _hUlSubText, ThemeManager.UploadColor);
@@ -491,9 +524,53 @@ namespace NetPulse {
                 _wifiNetworksCountBadgeText.Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary);
             }
 
+
             _tableCard.Background = Helpers.BrushFromHex(ThemeManager.CardBg);
             _tableCard.BorderBrush = Helpers.BrushFromHex(ThemeManager.CardBorder);
-            _tableTitleText.Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted);
+
+            if (_selectedNetworkInspectorCard != null) {
+                _selectedNetworkInspectorCard.Background = Helpers.BrushFromHex(ThemeManager.SubCardBg);
+                _selectedNetworkInspectorCard.BorderBrush = Helpers.BrushFromHex(ThemeManager.TotalColor);
+            }
+            if (_inspectorSsidTitle != null) {
+                _inspectorSsidTitle.Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary);
+            }
+            if (_inspectorClearBtn != null) {
+                _inspectorClearBtn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                _inspectorClearBtn.Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor);
+                _inspectorClearBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+            if (_clearWifiFilterBtn != null) {
+                _clearWifiFilterBtn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                _clearWifiFilterBtn.Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor);
+                _clearWifiFilterBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+
+            UpdateHistorySubViewTabStyles();
+
+            if (_siteSearchBox != null) {
+                _siteSearchBox.Background = Helpers.BrushFromHex(ThemeManager.SubCardBg);
+                _siteSearchBox.Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary);
+                _siteSearchBox.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+            if (_browserFilterCombo != null) {
+                _browserFilterCombo.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                _browserFilterCombo.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
+                _browserFilterCombo.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+            if (_refreshSitesBtn != null) {
+                _refreshSitesBtn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                _refreshSitesBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
+                _refreshSitesBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+            if (_exportSitesCsvBtn != null) {
+                _exportSitesCsvBtn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                _exportSitesCsvBtn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
+                _exportSitesCsvBtn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+            }
+            if (_visitedSitesSummaryText != null) {
+                _visitedSitesSummaryText.Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary);
+            }
 
             UpdatePresetButtonsTheme();
 
@@ -1059,22 +1136,11 @@ namespace NetPulse {
                 Content = "📁 Export CSV",
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(10, 5, 10, 5),
-                Margin = new Thickness(0, 0, 8, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
             _exportCsvBtn.Click += OnExportCsvClicked;
             rightActions.Children.Add(_exportCsvBtn);
-
-            _clearHistoryBtn = new Button {
-                Content = "🗑 Clear",
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(10, 5, 10, 5),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                FontSize = 11
-            };
-            _clearHistoryBtn.Click += OnClearHistoryClicked;
-            rightActions.Children.Add(_clearHistoryBtn);
 
             Grid.SetColumn(rightActions, 2);
             controlBar.Children.Add(rightActions);
@@ -1171,17 +1237,12 @@ namespace NetPulse {
             _wifiBreakdownCard.Margin = new Thickness(0, 0, 0, 10);
             leftPanel.Children.Add(_wifiBreakdownCard);
 
-            _ethBreakdownCard = CreateAdapterBreakdownCard("🔌 Ethernet Total Usage",
-                out _ethTitleText, out _ethTotalText, out _ethSubText,
-                out _ethProgressBg, out _ethProgressFill);
-            _ethBreakdownCard.Margin = new Thickness(0, 0, 0, 10);
-            leftPanel.Children.Add(_ethBreakdownCard);
-
-            // Wi-Fi Networks Breakdown Card
+            // Wi-Fi Networks Breakdown Card (placed directly beneath Wi-Fi Total Usage)
             _wifiNetworksCard = new Border {
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(14),
-                Padding = new Thickness(14, 12, 14, 12)
+                Padding = new Thickness(14, 12, 14, 12),
+                Margin = new Thickness(0, 0, 0, 10)
             };
 
             Grid wifiNetsInner = new Grid();
@@ -1201,6 +1262,25 @@ namespace NetPulse {
             Grid.SetColumn(_wifiNetworksTitleText, 0);
             wifiNetsHeader.Children.Add(_wifiNetworksTitleText);
 
+            StackPanel wifiHeaderRight = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+            _clearWifiFilterBtn = new Button {
+                Content = "✕ Show All",
+                ToolTip = "Clear network filter and show multi-network overview",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Visibility = Visibility.Collapsed
+            };
+            _clearWifiFilterBtn.Click += delegate(object s, RoutedEventArgs e) {
+                _selectedWifiSsid = null;
+                RefreshHistoryView();
+            };
+            wifiHeaderRight.Children.Add(_clearWifiFilterBtn);
+
             _wifiNetworksCountBadge = new Border {
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(6, 2, 6, 2),
@@ -1212,8 +1292,10 @@ namespace NetPulse {
                 FontWeight = FontWeights.SemiBold
             };
             _wifiNetworksCountBadge.Child = _wifiNetworksCountBadgeText;
-            Grid.SetColumn(_wifiNetworksCountBadge, 1);
-            wifiNetsHeader.Children.Add(_wifiNetworksCountBadge);
+            wifiHeaderRight.Children.Add(_wifiNetworksCountBadge);
+
+            Grid.SetColumn(wifiHeaderRight, 1);
+            wifiNetsHeader.Children.Add(wifiHeaderRight);
 
             Grid.SetRow(wifiNetsHeader, 0);
             wifiNetsInner.Children.Add(wifiNetsHeader);
@@ -1224,6 +1306,12 @@ namespace NetPulse {
 
             _wifiNetworksCard.Child = wifiNetsInner;
             leftPanel.Children.Add(_wifiNetworksCard);
+
+            _ethBreakdownCard = CreateAdapterBreakdownCard("🔌 Ethernet Total Usage",
+                out _ethTitleText, out _ethTotalText, out _ethSubText,
+                out _ethProgressBg, out _ethProgressFill);
+            _ethBreakdownCard.Margin = new Thickness(0, 0, 0, 10);
+            leftPanel.Children.Add(_ethBreakdownCard);
 
             leftScroll.Content = leftPanel;
             Grid.SetColumn(leftScroll, 0);
@@ -1238,14 +1326,159 @@ namespace NetPulse {
             tableInner.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             tableInner.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            _tableTitleText = new TextBlock {
-                Text = "DAILY DATA USAGE LOG",
-                FontSize = 10.5,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 8)
+            // ── SUB-HEADER: DUAL VIEW SWITCHER TABS ──
+            Grid subHeaderGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            subHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            subHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            StackPanel subTabsSp = new StackPanel { Orientation = Orientation.Horizontal };
+            _tabDailyTrafficBtn = new Button {
+                Content = "📊 Daily Data Log",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 5, 12, 5),
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11
             };
-            Grid.SetRow(_tableTitleText, 0);
-            tableInner.Children.Add(_tableTitleText);
+            _tabDailyTrafficBtn.Click += delegate(object s, RoutedEventArgs e) { SwitchHistorySubView(0); };
+            subTabsSp.Children.Add(_tabDailyTrafficBtn);
+
+            _tabVisitedSitesBtn = new Button {
+                Content = "🌐 Visited Sites & URLs (0)",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 5, 12, 5),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11
+            };
+            _tabVisitedSitesBtn.Click += delegate(object s, RoutedEventArgs e) { SwitchHistorySubView(1); };
+            subTabsSp.Children.Add(_tabVisitedSitesBtn);
+
+            Grid.SetColumn(subTabsSp, 0);
+            subHeaderGrid.Children.Add(subTabsSp);
+
+            Grid.SetRow(subHeaderGrid, 0);
+            tableInner.Children.Add(subHeaderGrid);
+
+            // ── VIEW 0: DAILY DATA USAGE LOG ──
+            _dailyTrafficViewGrid = new Grid();
+            _dailyTrafficViewGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _dailyTrafficViewGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            // ── SELECTED NETWORK INSPECTOR CARD ──
+            _selectedNetworkInspectorCard = new Border {
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(0, 0, 0, 10),
+                Visibility = Visibility.Collapsed
+            };
+
+            Grid inspectorGrid = new Grid();
+            inspectorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            inspectorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // Inspector Header
+            Grid inspHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            inspHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            inspHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            StackPanel inspTitleSp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock inspIcon = new TextBlock {
+                Text = "📶",
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            inspTitleSp.Children.Add(inspIcon);
+
+            _inspectorSsidTitle = new TextBlock {
+                Text = "Network Details",
+                FontWeight = FontWeights.Bold,
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            inspTitleSp.Children.Add(_inspectorSsidTitle);
+
+            _inspectorStatusBadge = new Border {
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6, 1, 6, 1),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _inspectorStatusText = new TextBlock {
+                Text = "Active",
+                FontSize = 10,
+                FontWeight = FontWeights.Bold
+            };
+            _inspectorStatusBadge.Child = _inspectorStatusText;
+            inspTitleSp.Children.Add(_inspectorStatusBadge);
+
+            Grid.SetColumn(inspTitleSp, 0);
+            inspHeader.Children.Add(inspTitleSp);
+
+            _inspectorClearBtn = new Button {
+                Content = "✕ Show All Networks",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 3, 8, 3),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold
+            };
+            _inspectorClearBtn.Click += delegate(object s, RoutedEventArgs e) {
+                _selectedWifiSsid = null;
+                RefreshHistoryView();
+            };
+            Grid.SetColumn(_inspectorClearBtn, 1);
+            inspHeader.Children.Add(_inspectorClearBtn);
+
+            Grid.SetRow(inspHeader, 0);
+            inspectorGrid.Children.Add(inspHeader);
+
+            // Inspector Metrics Row
+            Grid inspMetrics = new Grid();
+            inspMetrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.1, GridUnitType.Star) });
+            inspMetrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.3, GridUnitType.Star) });
+            inspMetrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.4, GridUnitType.Star) });
+            inspMetrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.1, GridUnitType.Star) });
+
+            // Metric 1: Total Data
+            StackPanel m1Sp = new StackPanel();
+            m1Sp.Children.Add(new TextBlock { Text = "TOTAL DATA", FontSize = 9.5, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) });
+            _inspectorTotalText = new TextBlock { Text = "0 B", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor), Margin = new Thickness(0, 2, 0, 0) };
+            m1Sp.Children.Add(_inspectorTotalText);
+            Grid.SetColumn(m1Sp, 0);
+            inspMetrics.Children.Add(m1Sp);
+
+            // Metric 2: Download / Upload
+            StackPanel m2Sp = new StackPanel();
+            m2Sp.Children.Add(new TextBlock { Text = "RECV / SENT", FontSize = 9.5, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) });
+            _inspectorDlUlText = new TextBlock { Text = "↓ 0 B  •  ↑ 0 B", FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary), Margin = new Thickness(0, 2, 0, 0) };
+            m2Sp.Children.Add(_inspectorDlUlText);
+            Grid.SetColumn(m2Sp, 1);
+            inspMetrics.Children.Add(m2Sp);
+
+            // Metric 3: Peak Speeds
+            StackPanel m3Sp = new StackPanel();
+            m3Sp.Children.Add(new TextBlock { Text = "RECORDED PEAK", FontSize = 9.5, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) });
+            _inspectorPeakSpeedText = new TextBlock { Text = "↓ 0 B/s  •  ↑ 0 B/s", FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary), Margin = new Thickness(0, 2, 0, 0) };
+            m3Sp.Children.Add(_inspectorPeakSpeedText);
+            Grid.SetColumn(m3Sp, 2);
+            inspMetrics.Children.Add(m3Sp);
+
+            // Metric 4: Share of Wi-Fi
+            StackPanel m4Sp = new StackPanel();
+            m4Sp.Children.Add(new TextBlock { Text = "SHARE OF WI-FI", FontSize = 9.5, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) });
+            _inspectorShareText = new TextBlock { Text = "0.0%", FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.WifiBadgeBorder), Margin = new Thickness(0, 2, 0, 0) };
+            m4Sp.Children.Add(_inspectorShareText);
+            Grid.SetColumn(m4Sp, 3);
+            inspMetrics.Children.Add(m4Sp);
+
+            Grid.SetRow(inspMetrics, 1);
+            inspectorGrid.Children.Add(inspMetrics);
+
+            _selectedNetworkInspectorCard.Child = inspectorGrid;
+            Grid.SetRow(_selectedNetworkInspectorCard, 0);
+            _dailyTrafficViewGrid.Children.Add(_selectedNetworkInspectorCard);
 
             ScrollViewer tableScroll = new ScrollViewer {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1254,7 +1487,134 @@ namespace NetPulse {
             _tableRowsPanel = new StackPanel();
             tableScroll.Content = _tableRowsPanel;
             Grid.SetRow(tableScroll, 1);
-            tableInner.Children.Add(tableScroll);
+            _dailyTrafficViewGrid.Children.Add(tableScroll);
+
+            // ── VIEW 1: VISITED SITES & URL LIST USAGE HISTORY ──
+            _visitedSitesViewGrid = new Grid();
+            _visitedSitesViewGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _visitedSitesViewGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _visitedSitesViewGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            _visitedSitesViewGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // Toolbar
+            Grid siteToolbar = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            siteToolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            siteToolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            StackPanel siteFiltersSp = new StackPanel { Orientation = Orientation.Horizontal };
+            _siteSearchBox = new TextBox {
+                Width = 230,
+                Height = 28,
+                FontSize = 11.5,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            _siteSearchBox.TextChanged += delegate(object s, TextChangedEventArgs e) {
+                RenderVisitedSitesRows();
+            };
+            siteFiltersSp.Children.Add(_siteSearchBox);
+
+            _browserFilterCombo = new ComboBox {
+                Width = 120,
+                Height = 28,
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            _browserFilterCombo.Items.Add("All Browsers");
+            _browserFilterCombo.Items.Add("Edge");
+            _browserFilterCombo.Items.Add("Chrome");
+            _browserFilterCombo.Items.Add("Firefox");
+            _browserFilterCombo.Items.Add("Brave");
+            _browserFilterCombo.Items.Add("Opera");
+            _browserFilterCombo.SelectedIndex = 0;
+            _browserFilterCombo.SelectionChanged += delegate(object s, SelectionChangedEventArgs e) {
+                RenderVisitedSitesRows();
+            };
+            siteFiltersSp.Children.Add(_browserFilterCombo);
+            Grid.SetColumn(siteFiltersSp, 0);
+            siteToolbar.Children.Add(siteFiltersSp);
+
+            StackPanel siteActionsSp = new StackPanel { Orientation = Orientation.Horizontal };
+            _refreshSitesBtn = new Button {
+                Content = "↻ Refresh",
+                ToolTip = "Reload browser history from local databases",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11
+            };
+            _refreshSitesBtn.Click += delegate(object s, RoutedEventArgs e) {
+                RefreshHistoryView();
+            };
+            siteActionsSp.Children.Add(_refreshSitesBtn);
+
+            _exportSitesCsvBtn = new Button {
+                Content = "📁 Export URLs",
+                ToolTip = "Export visited sites for this period to CSV",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(10, 4, 10, 4),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11
+            };
+            _exportSitesCsvBtn.Click += OnExportVisitedSitesCsvClicked;
+            siteActionsSp.Children.Add(_exportSitesCsvBtn);
+            Grid.SetColumn(siteActionsSp, 1);
+            siteToolbar.Children.Add(siteActionsSp);
+
+            Grid.SetRow(siteToolbar, 0);
+            _visitedSitesViewGrid.Children.Add(siteToolbar);
+
+            // Table Header Grid
+            Grid siteTh = new Grid { Margin = new Thickness(8, 0, 8, 6) };
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(75) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(135) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });
+
+            TextBlock sh1 = new TextBlock { Text = "PAGE TITLE & URL", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock sh2 = new TextBlock { Text = "BROWSER", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock sh3 = new TextBlock { Text = "VISITS", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock sh4 = new TextBlock { Text = "LAST VISITED", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock sh5 = new TextBlock { Text = "ACTION", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted), HorizontalAlignment = HorizontalAlignment.Right };
+
+            Grid.SetColumn(sh1, 0); siteTh.Children.Add(sh1);
+            Grid.SetColumn(sh2, 1); siteTh.Children.Add(sh2);
+            Grid.SetColumn(sh3, 2); siteTh.Children.Add(sh3);
+            Grid.SetColumn(sh4, 3); siteTh.Children.Add(sh4);
+            Grid.SetColumn(sh5, 4); siteTh.Children.Add(sh5);
+            Grid.SetRow(siteTh, 1);
+            _visitedSitesViewGrid.Children.Add(siteTh);
+
+            // Rows Scroll
+            ScrollViewer sitesScroll = new ScrollViewer {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            _visitedSitesRowsPanel = new StackPanel();
+            sitesScroll.Content = _visitedSitesRowsPanel;
+            Grid.SetRow(sitesScroll, 2);
+            _visitedSitesViewGrid.Children.Add(sitesScroll);
+
+            // Summary Footer
+            _visitedSitesSummaryText = new TextBlock {
+                Text = "Showing 0 visited URLs",
+                FontSize = 10.5,
+                Margin = new Thickness(8, 6, 8, 0)
+            };
+            Grid.SetRow(_visitedSitesSummaryText, 3);
+            _visitedSitesViewGrid.Children.Add(_visitedSitesSummaryText);
+
+            // View container
+            Grid viewsContainer = new Grid();
+            viewsContainer.Children.Add(_dailyTrafficViewGrid);
+            viewsContainer.Children.Add(_visitedSitesViewGrid);
+            _visitedSitesViewGrid.Visibility = Visibility.Collapsed; // Default to Daily Data Log
+
+            Grid.SetRow(viewsContainer, 1);
+            tableInner.Children.Add(viewsContainer);
 
             _tableCard.Child = tableInner;
             Grid.SetColumn(_tableCard, 1);
@@ -1528,7 +1888,54 @@ namespace NetPulse {
             themeCard.Child = themeSp;
             leftCol.Children.Add(themeCard);
 
-            // ── Card 4: 🎯 Monthly Data Quota & Alerts ──
+            // ── Card 4: 🌐 Visited Sites & Browsing History ──
+            Border sitesSettingsCard = CreateSettingsCard("🌐 VISITED SITES & BROWSING HISTORY");
+            StackPanel sitesSp = new StackPanel();
+
+            _enableVisitedSitesCheck = CreateSettingsCheckBox("Track Visited Site URLs & Titles",
+                "Extract visited site URLs from installed browsers (Edge, Chrome, Firefox, Brave, Opera)",
+                delegate(bool isChecked) {
+                    AppSettings.Instance.EnableVisitedSitesHistory = isChecked;
+                    AppSettings.Instance.Save();
+                    RefreshHistoryView();
+                });
+            sitesSp.Children.Add(_enableVisitedSitesCheck);
+
+            _includeVisitedSitesCsvCheck = CreateSettingsCheckBox("Include Visited Sites in CSV Reports",
+                "Append visited site URLs and visit counts when generating CSV export reports",
+                delegate(bool isChecked) {
+                    AppSettings.Instance.IncludeVisitedSitesInExport = isChecked;
+                    AppSettings.Instance.Save();
+                });
+            sitesSp.Children.Add(_includeVisitedSitesCsvCheck);
+
+            TextBlock sitesPrivacyNote = new TextBlock {
+                Text = "Browsing history is read directly from your local browser databases using native Windows SQLite. All data remains 100% private and offline on your PC.",
+                FontSize = 10.5,
+                Margin = new Thickness(0, 4, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            };
+            _settingsSubLabels.Add(sitesPrivacyNote);
+            sitesSp.Children.Add(sitesPrivacyNote);
+
+            _refreshVisitedSitesSettingsBtn = new Button {
+                Content = "↻ Refresh Browser History Cache Now",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11
+            };
+            _refreshVisitedSitesSettingsBtn.Click += delegate(object s, RoutedEventArgs e) {
+                RefreshHistoryView();
+                MessageBox.Show("Visited sites history refreshed from local browser databases.", "History Refreshed", MessageBoxButton.OK, MessageBoxImage.Information);
+            };
+            sitesSp.Children.Add(_refreshVisitedSitesSettingsBtn);
+
+            sitesSettingsCard.Child = sitesSp;
+            leftCol.Children.Add(sitesSettingsCard);
+
+            // ── Card 5: 🎯 Monthly Data Quota & Alerts ──
             Border quotaCardOuter = CreateSettingsCard("🎯 MONTHLY DATA QUOTA & USAGE CAP");
             StackPanel quotaSp = new StackPanel();
 
@@ -1855,6 +2262,13 @@ namespace NetPulse {
             _quotaLimitBox.Text = settings.MonthlyQuotaGB.ToString("0.#");
             _quotaResetDayBox.Text = settings.QuotaResetDay.ToString();
 
+            if (_enableVisitedSitesCheck != null) {
+                _enableVisitedSitesCheck.IsChecked = settings.EnableVisitedSitesHistory;
+            }
+            if (_includeVisitedSitesCsvCheck != null) {
+                _includeVisitedSitesCsvCheck.IsChecked = settings.IncludeVisitedSitesInExport;
+            }
+
             // Refresh storage stats
             try {
                 if (File.Exists(UsageStorage.Instance.StorageFilePath)) {
@@ -1901,30 +2315,45 @@ namespace NetPulse {
         // ════════════════════════════════════════════════════════
         private void RefreshHistoryView() {
             PeriodUsageSummary summary = UsageStorage.Instance.GetSummary(_currentHistoryPreset);
+            PeriodUsageSummary displaySummary = summary;
 
-            _historyRangeBadgeText.Text = "📅 " + summary.DateRangeLabel;
+            bool isSsidFiltered = !string.IsNullOrEmpty(_selectedWifiSsid);
+            if (isSsidFiltered) {
+                displaySummary = UsageStorage.Instance.GetSummaryForSsid(_currentHistoryPreset, _selectedWifiSsid);
+            }
 
-            _hTotalValText.Text = Helpers.FormatBytes(summary.TotalBytes);
-            _hTotalSubText.Text = string.Format("{0} total days in period", summary.DailyRecords.Count);
+            _historyRangeBadgeText.Text = isSsidFiltered
+                ? string.Format("📅 {0}  •  📶 {1}", summary.DateRangeLabel, _selectedWifiSsid)
+                : "📅 " + summary.DateRangeLabel;
 
-            _hDlValText.Text = Helpers.FormatBytes(summary.TotalDownloaded);
-            double dlShare = (summary.TotalBytes > 0) ? ((double)summary.TotalDownloaded / summary.TotalBytes * 100.0) : 0;
+            _hTotalValText.Text = Helpers.FormatBytes(displaySummary.TotalBytes);
+            _hTotalSubText.Text = isSsidFiltered
+                ? string.Format("{0} usage on {1}", Helpers.FormatBytes(displaySummary.TotalBytes), _selectedWifiSsid)
+                : string.Format("{0} total days in period", summary.DailyRecords.Count);
+
+            _hDlValText.Text = Helpers.FormatBytes(displaySummary.TotalDownloaded);
+            double dlShare = (displaySummary.TotalBytes > 0) ? ((double)displaySummary.TotalDownloaded / displaySummary.TotalBytes * 100.0) : 0;
             _hDlSubText.Text = string.Format("{0:0.#}% of total data", dlShare);
 
-            _hUlValText.Text = Helpers.FormatBytes(summary.TotalUploaded);
-            double ulShare = (summary.TotalBytes > 0) ? ((double)summary.TotalUploaded / summary.TotalBytes * 100.0) : 0;
+            _hUlValText.Text = Helpers.FormatBytes(displaySummary.TotalUploaded);
+            double ulShare = (displaySummary.TotalBytes > 0) ? ((double)displaySummary.TotalUploaded / displaySummary.TotalBytes * 100.0) : 0;
             _hUlSubText.Text = string.Format("{0:0.#}% of total data", ulShare);
 
-            _hAvgValText.Text = Helpers.FormatBytes(summary.DailyAverageBytes) + "/day";
-            if (!string.IsNullOrEmpty(summary.PeakDayDate)) {
+            _hAvgValText.Text = Helpers.FormatBytes(displaySummary.DailyAverageBytes) + "/day";
+            if (!string.IsNullOrEmpty(displaySummary.PeakDayDate)) {
                 DateTime pdt;
-                string pDate = DateTime.TryParse(summary.PeakDayDate, out pdt) ? pdt.ToString("MMM dd") : summary.PeakDayDate;
-                _hAvgSubText.Text = string.Format("Peak: {0} ({1})", Helpers.FormatBytes(summary.PeakDayBytes), pDate);
+                string pDate = DateTime.TryParse(displaySummary.PeakDayDate, out pdt) ? pdt.ToString("MMM dd") : displaySummary.PeakDayDate;
+                _hAvgSubText.Text = string.Format("Peak: {0} ({1})", Helpers.FormatBytes(displaySummary.PeakDayBytes), pDate);
             } else {
                 _hAvgSubText.Text = "Peak: 0 B";
             }
 
-            _historyBarChart.SetData(summary);
+            _historyBarChart.SetData(displaySummary);
+            if (_historyChartTitle != null) {
+                _historyChartTitle.Text = isSsidFiltered
+                    ? string.Format("DAILY DATA USAGE BREAKDOWN — {0}", _selectedWifiSsid.ToUpperInvariant())
+                    : "DAILY DATA USAGE BREAKDOWN (STACKED RECV & SENT)";
+            }
 
             long totalAll = summary.TotalBytes;
             double wifiPct = (totalAll > 0) ? ((double)summary.WifiTotal / totalAll * 100.0) : 0;
@@ -1943,6 +2372,43 @@ namespace NetPulse {
                 Helpers.FormatBytes(summary.EthernetUploaded),
                 ethPct);
             _ethProgressFill.Width = Math.Max(0, Math.Min(300, (ethPct / 100.0) * 300));
+
+            // Inspector Card Update
+            if (_selectedNetworkInspectorCard != null) {
+                if (isSsidFiltered) {
+                    _selectedNetworkInspectorCard.Visibility = Visibility.Visible;
+                    if (_clearWifiFilterBtn != null) _clearWifiFilterBtn.Visibility = Visibility.Visible;
+
+                    string curConnected = WifiNetworkHelper.GetCurrentWifiSsid();
+                    bool isCur = (!string.IsNullOrEmpty(curConnected) && string.Equals(_selectedWifiSsid, curConnected, StringComparison.OrdinalIgnoreCase));
+
+                    _inspectorSsidTitle.Text = _selectedWifiSsid;
+                    _inspectorStatusText.Text = isCur ? "Active Wi-Fi" : "Saved Network";
+                    _inspectorStatusBadge.Background = Helpers.BrushFromHex(isCur ? ThemeManager.BadgeBg : ThemeManager.SubCardBg);
+                    _inspectorStatusText.Foreground = Helpers.BrushFromHex(isCur ? ThemeManager.StatusConnected : ThemeManager.TextSecondary);
+
+                    _inspectorTotalText.Text = Helpers.FormatBytes(displaySummary.TotalBytes);
+                    _inspectorDlUlText.Text = string.Format("↓ {0}  •  ↑ {1}",
+                        Helpers.FormatBytes(displaySummary.TotalDownloaded),
+                        Helpers.FormatBytes(displaySummary.TotalUploaded));
+
+                    double peakDl = 0;
+                    double peakUl = 0;
+                    if (displaySummary.WifiNetworkBreakdown != null && displaySummary.WifiNetworkBreakdown.Count > 0) {
+                        peakDl = displaySummary.WifiNetworkBreakdown[0].PeakDownloadSpeed;
+                        peakUl = displaySummary.WifiNetworkBreakdown[0].PeakUploadSpeed;
+                    }
+                    _inspectorPeakSpeedText.Text = string.Format("↓ {0}  •  ↑ {1}",
+                        Helpers.FormatSpeed(peakDl),
+                        Helpers.FormatSpeed(peakUl));
+
+                    double shareOfWifi = (summary.WifiTotal > 0) ? ((double)displaySummary.TotalBytes / summary.WifiTotal * 100.0) : 0;
+                    _inspectorShareText.Text = string.Format("{0:0.#}% of Wi-Fi", shareOfWifi);
+                } else {
+                    _selectedNetworkInspectorCard.Visibility = Visibility.Collapsed;
+                    if (_clearWifiFilterBtn != null) _clearWifiFilterBtn.Visibility = Visibility.Collapsed;
+                }
+            }
 
             // Populate Wi-Fi Networks Breakdown
             if (_wifiNetworksListPanel != null) {
@@ -1973,19 +2439,32 @@ namespace NetPulse {
                     for (int i = 0; i < count; i++) {
                         WifiNetworkUsageRecord net = summary.WifiNetworkBreakdown[i];
                         bool isCurrentConnected = (!string.IsNullOrEmpty(currentSsid) && string.Equals(net.Ssid, currentSsid, StringComparison.OrdinalIgnoreCase));
+                        bool isSelected = (!string.IsNullOrEmpty(_selectedWifiSsid) && string.Equals(net.Ssid, _selectedWifiSsid, StringComparison.OrdinalIgnoreCase));
 
                         Border itemCard = new Border {
                             CornerRadius = new CornerRadius(8),
                             Padding = new Thickness(10, 8, 10, 8),
                             Margin = new Thickness(0, 0, 0, 6),
-                            Background = Helpers.BrushFromHex(ThemeManager.SubCardBg),
-                            BorderThickness = new Thickness(isCurrentConnected ? 1 : 0),
-                            BorderBrush = Helpers.BrushFromHex(isCurrentConnected ? ThemeManager.StatusConnected : ThemeManager.CardBorder)
+                            Background = Helpers.BrushFromHex(isSelected ? ThemeManager.CardBg : ThemeManager.SubCardBg),
+                            BorderThickness = new Thickness(isSelected ? 2 : 1),
+                            BorderBrush = Helpers.BrushFromHex(isSelected ? ThemeManager.TotalColor : (isCurrentConnected ? (ThemeManager.IsDark ? "#059669" : "#6EE7B7") : ThemeManager.CardBorder)),
+                            Cursor = System.Windows.Input.Cursors.Hand,
+                            ToolTip = isSelected ? "Click to deselect and show all networks" : string.Format("Click to inspect and filter details for {0}", net.Ssid)
+                        };
+
+                        string targetSsid = net.Ssid;
+                        itemCard.MouseLeftButtonUp += delegate(object s, MouseButtonEventArgs e) {
+                            if (string.Equals(_selectedWifiSsid, targetSsid, StringComparison.OrdinalIgnoreCase)) {
+                                _selectedWifiSsid = null;
+                            } else {
+                                _selectedWifiSsid = targetSsid;
+                            }
+                            RefreshHistoryView();
                         };
 
                         StackPanel itemSp = new StackPanel();
 
-                        // Top line: SSID Name (and optional [Active] badge) + Total Bytes
+                        // Top line: SSID Name (and badges) + Total Bytes
                         Grid topLine = new Grid();
                         topLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                         topLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -2001,10 +2480,10 @@ namespace NetPulse {
                             Text = net.Ssid,
                             FontWeight = FontWeights.Bold,
                             FontSize = 12,
-                            Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary),
+                            Foreground = Helpers.BrushFromHex(isSelected ? ThemeManager.TotalColor : ThemeManager.TextPrimary),
                             VerticalAlignment = VerticalAlignment.Center,
                             TextTrimming = TextTrimming.CharacterEllipsis,
-                            MaxWidth = 180
+                            MaxWidth = 170
                         };
                         nameSp.Children.Add(ssidIcon);
                         nameSp.Children.Add(ssidName);
@@ -2025,6 +2504,24 @@ namespace NetPulse {
                             };
                             connBadge.Child = connText;
                             nameSp.Children.Add(connBadge);
+                        }
+
+                        if (isSelected) {
+                            Border selBadge = new Border {
+                                CornerRadius = new CornerRadius(6),
+                                Background = Helpers.BrushFromHex(ThemeManager.BadgeBg),
+                                Padding = new Thickness(5, 1, 5, 1),
+                                Margin = new Thickness(6, 0, 0, 0),
+                                VerticalAlignment = VerticalAlignment.Center
+                            };
+                            TextBlock selText = new TextBlock {
+                                Text = "Selected ✓",
+                                FontSize = 9.5,
+                                FontWeight = FontWeights.Bold,
+                                Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor)
+                            };
+                            selBadge.Child = selText;
+                            nameSp.Children.Add(selBadge);
                         }
 
                         Grid.SetColumn(nameSp, 0);
@@ -2078,12 +2575,61 @@ namespace NetPulse {
                         Border barFill = new Border {
                             Height = 4,
                             CornerRadius = new CornerRadius(2),
-                            Background = Helpers.BrushFromHex(ThemeManager.WifiBadgeBorder),
+                            Background = Helpers.BrushFromHex(isSelected ? ThemeManager.TotalColor : ThemeManager.WifiBadgeBorder),
                             HorizontalAlignment = HorizontalAlignment.Left,
                             Width = barWidth
                         };
                         barBg.Child = barFill;
                         itemSp.Children.Add(barBg);
+
+                        // Inline details drawer when selected
+                        if (isSelected) {
+                            Border drawerBorder = new Border {
+                                Margin = new Thickness(0, 6, 0, 2),
+                                Padding = new Thickness(8, 6, 8, 6),
+                                CornerRadius = new CornerRadius(6),
+                                Background = Helpers.BrushFromHex(ThemeManager.WindowBg),
+                                BorderThickness = new Thickness(1),
+                                BorderBrush = Helpers.BrushFromHex(ThemeManager.CardBorder)
+                            };
+                            Grid drawerGrid = new Grid();
+                            drawerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                            drawerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                            TextBlock peakTxt = new TextBlock {
+                                Text = string.Format("⚡ Peak: ↓ {0}  ↑ {1}", Helpers.FormatSpeed(net.PeakDownloadSpeed), Helpers.FormatSpeed(net.PeakUploadSpeed)),
+                                FontSize = 10,
+                                FontWeight = FontWeights.SemiBold,
+                                Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary),
+                                VerticalAlignment = VerticalAlignment.Center
+                            };
+                            Grid.SetColumn(peakTxt, 0);
+                            drawerGrid.Children.Add(peakTxt);
+
+                            TextBlock deselectTxt = new TextBlock {
+                                Text = "Click to unfilter ✕",
+                                FontSize = 9.5,
+                                FontWeight = FontWeights.SemiBold,
+                                Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor),
+                                VerticalAlignment = VerticalAlignment.Center
+                            };
+                            Grid.SetColumn(deselectTxt, 1);
+                            drawerGrid.Children.Add(deselectTxt);
+
+                            drawerBorder.Child = drawerGrid;
+                            itemSp.Children.Add(drawerBorder);
+                        }
+
+                        // Right-click context menu
+                        ContextMenu ctxMenu = new ContextMenu();
+                        MenuItem deleteMenuItem = new MenuItem {
+                            Header = string.Format("🗑 Delete \"{0}\" from History", net.Ssid)
+                        };
+                        deleteMenuItem.Click += delegate {
+                            ConfirmAndDeleteWifiNetwork(targetSsid);
+                        };
+                        ctxMenu.Items.Add(deleteMenuItem);
+                        itemCard.ContextMenu = ctxMenu;
 
                         itemCard.Child = itemSp;
                         _wifiNetworksListPanel.Children.Add(itemCard);
@@ -2091,7 +2637,25 @@ namespace NetPulse {
                 }
             }
 
+            // Update Visited Sites Cache
+            _currentVisitedSites = summary.VisitedSites ?? new List<VisitedSiteRecord>();
+            if (_tabVisitedSitesBtn != null) {
+                _tabVisitedSitesBtn.Content = string.Format("🌐 Visited Sites & URLs ({0})", _currentVisitedSites.Count);
+            }
+
+            // Populate active sub-view
+            if (_historySubViewIndex == 0) {
+                PopulateDailyLogTable(displaySummary);
+            } else {
+                RenderVisitedSitesRows();
+            }
+        }
+
+        private void PopulateDailyLogTable(PeriodUsageSummary summary) {
+            if (_tableRowsPanel == null || summary == null) return;
             _tableRowsPanel.Children.Clear();
+
+            bool isSsidFiltered = !string.IsNullOrEmpty(_selectedWifiSsid);
 
             Grid thGrid = new Grid { Margin = new Thickness(6, 0, 6, 6) };
             thGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
@@ -2100,9 +2664,9 @@ namespace NetPulse {
             thGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             TextBlock h1 = new TextBlock { Text = "DATE", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
-            TextBlock h2 = new TextBlock { Text = "DOWNLOAD", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
-            TextBlock h3 = new TextBlock { Text = "UPLOAD", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
-            TextBlock h4 = new TextBlock { Text = "TOTAL", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted), HorizontalAlignment = HorizontalAlignment.Right };
+            TextBlock h2 = new TextBlock { Text = isSsidFiltered ? "DOWNLOAD (SSID)" : "DOWNLOAD", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock h3 = new TextBlock { Text = isSsidFiltered ? "UPLOAD (SSID)" : "UPLOAD", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
+            TextBlock h4 = new TextBlock { Text = isSsidFiltered ? "TOTAL (SSID)" : "TOTAL", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted), HorizontalAlignment = HorizontalAlignment.Right };
 
             Grid.SetColumn(h1, 0); thGrid.Children.Add(h1);
             Grid.SetColumn(h2, 1); thGrid.Children.Add(h2);
@@ -2110,14 +2674,18 @@ namespace NetPulse {
             Grid.SetColumn(h4, 3); thGrid.Children.Add(h4);
             _tableRowsPanel.Children.Add(thGrid);
 
+            int renderedCount = 0;
             for (int i = summary.DailyRecords.Count - 1; i >= 0; i--) {
                 DayUsageRecord day = summary.DailyRecords[i];
+                if (isSsidFiltered && day.TotalBytes == 0) {
+                    continue;
+                }
 
                 Border rowBorder = new Border {
                     Padding = new Thickness(6, 6, 6, 6),
                     CornerRadius = new CornerRadius(6),
                     Margin = new Thickness(0, 0, 0, 4),
-                    Background = Helpers.BrushFromHex((i % 2 == 0) ? ThemeManager.SubCardBg : "Transparent")
+                    Background = Helpers.BrushFromHex((renderedCount % 2 == 0) ? ThemeManager.SubCardBg : "Transparent")
                 };
 
                 Grid rowGrid = new Grid();
@@ -2141,6 +2709,343 @@ namespace NetPulse {
 
                 rowBorder.Child = rowGrid;
                 _tableRowsPanel.Children.Add(rowBorder);
+                renderedCount++;
+            }
+
+            if (renderedCount == 0 && isSsidFiltered) {
+                Border emptyRow = new Border {
+                    Padding = new Thickness(12, 16, 12, 16),
+                    CornerRadius = new CornerRadius(6),
+                    Background = Helpers.BrushFromHex(ThemeManager.SubCardBg),
+                    Margin = new Thickness(0, 4, 0, 0)
+                };
+                TextBlock emptyMsg = new TextBlock {
+                    Text = "No data recorded for \"" + _selectedWifiSsid + "\" in this selected time range.",
+                    FontSize = 11,
+                    Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted),
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                emptyRow.Child = emptyMsg;
+                _tableRowsPanel.Children.Add(emptyRow);
+            }
+        }
+
+
+        private void ConfirmAndDeleteWifiNetwork(string ssid) {
+            if (string.IsNullOrEmpty(ssid)) return;
+
+            string msg = string.Format(
+                "Are you sure you want to delete the network \"{0}\" from history?\n\n" +
+                "This will permanently remove this network and its recorded data from all historical logs and breakdown charts.",
+                ssid);
+
+            MessageBoxResult result = MessageBox.Show(
+                this,
+                msg,
+                "Delete Wi-Fi Network — NetPulse",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (result == MessageBoxResult.Yes) {
+                bool deleted = UsageStorage.Instance.DeleteWifiNetwork(ssid, true);
+                if (deleted) {
+                    if (string.Equals(_selectedWifiSsid, ssid, StringComparison.OrdinalIgnoreCase)) {
+                        _selectedWifiSsid = null;
+                    }
+                    RefreshHistoryView();
+                }
+            }
+        }
+
+        private void SwitchHistorySubView(int index) {
+            _historySubViewIndex = index;
+            if (_dailyTrafficViewGrid != null) {
+                _dailyTrafficViewGrid.Visibility = (_historySubViewIndex == 0) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            if (_visitedSitesViewGrid != null) {
+                _visitedSitesViewGrid.Visibility = (_historySubViewIndex == 1) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            UpdateHistorySubViewTabStyles();
+            if (_historySubViewIndex == 1) {
+                RenderVisitedSitesRows();
+            }
+        }
+
+        private void UpdateHistorySubViewTabStyles() {
+            if (_tabDailyTrafficBtn == null || _tabVisitedSitesBtn == null) return;
+            StyleHistorySubTabButton(_tabDailyTrafficBtn, _historySubViewIndex == 0);
+            StyleHistorySubTabButton(_tabVisitedSitesBtn, _historySubViewIndex == 1);
+        }
+
+        private void StyleHistorySubTabButton(Button btn, bool isActive) {
+            if (isActive) {
+                btn.Background = Helpers.BrushFromHex(ThemeManager.TabActiveBg);
+                btn.Foreground = Helpers.BrushFromHex(ThemeManager.TabActiveFg);
+                btn.BorderBrush = Helpers.BrushFromHex(ThemeManager.TabActiveBorder);
+                btn.FontWeight = FontWeights.Bold;
+            } else {
+                btn.Background = Helpers.BrushFromHex(ThemeManager.ButtonBg);
+                btn.Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg);
+                btn.BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder);
+                btn.FontWeight = FontWeights.Normal;
+            }
+        }
+
+        private Border CreateBrowserBadge(string browserName) {
+            string bName = string.IsNullOrEmpty(browserName) ? "Web" : browserName;
+            string borderHex = ThemeManager.ButtonBorder;
+            string bgHex = ThemeManager.BadgeBg;
+            string fgHex = ThemeManager.TextSecondary;
+
+            if (bName.IndexOf("Edge", StringComparison.OrdinalIgnoreCase) >= 0) {
+                borderHex = "#0078D7";
+                fgHex = ThemeManager.IsDark ? "#38BDF8" : "#0284C7";
+            } else if (bName.IndexOf("Chrome", StringComparison.OrdinalIgnoreCase) >= 0) {
+                borderHex = "#34A853";
+                fgHex = ThemeManager.IsDark ? "#4ADE80" : "#16A34A";
+            } else if (bName.IndexOf("Firefox", StringComparison.OrdinalIgnoreCase) >= 0) {
+                borderHex = "#FF7139";
+                fgHex = ThemeManager.IsDark ? "#FB923C" : "#EA580C";
+            } else if (bName.IndexOf("Brave", StringComparison.OrdinalIgnoreCase) >= 0) {
+                borderHex = "#FB542B";
+                fgHex = ThemeManager.IsDark ? "#F87171" : "#DC2626";
+            } else if (bName.IndexOf("Opera", StringComparison.OrdinalIgnoreCase) >= 0) {
+                borderHex = "#FF1B2D";
+                fgHex = ThemeManager.IsDark ? "#F43F5E" : "#E11D48";
+            }
+
+            Border b = new Border {
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(1),
+                BorderBrush = Helpers.BrushFromHex(borderHex),
+                Background = Helpers.BrushFromHex(bgHex),
+                Padding = new Thickness(6, 2, 6, 2),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            TextBlock tb = new TextBlock {
+                Text = bName,
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Helpers.BrushFromHex(fgHex)
+            };
+            b.Child = tb;
+            return b;
+        }
+
+        private Border CreateVisitedSiteRow(VisitedSiteRecord site, int index) {
+            Border rowBorder = new Border {
+                Padding = new Thickness(8, 7, 8, 7),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 0, 4),
+                Background = Helpers.BrushFromHex((index % 2 == 0) ? ThemeManager.SubCardBg : "Transparent")
+            };
+
+            Grid rowGrid = new Grid();
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(75) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(135) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });
+
+            StackPanel titleUrlSp = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+            TextBlock titleTb = new TextBlock {
+                Text = string.IsNullOrEmpty(site.Title) ? site.Domain : site.Title,
+                FontSize = 11.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = site.Title
+            };
+            TextBlock urlTb = new TextBlock {
+                Text = site.Url,
+                FontSize = 10,
+                Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 2, 0, 0),
+                ToolTip = site.Url,
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            string targetUrl = site.Url;
+            urlTb.MouseLeftButtonUp += delegate(object s, System.Windows.Input.MouseButtonEventArgs e) {
+                try {
+                    Process.Start(targetUrl);
+                } catch {}
+            };
+
+            titleUrlSp.Children.Add(titleTb);
+            titleUrlSp.Children.Add(urlTb);
+            Grid.SetColumn(titleUrlSp, 0);
+            rowGrid.Children.Add(titleUrlSp);
+
+            Border browserBadge = CreateBrowserBadge(site.Browser);
+            Grid.SetColumn(browserBadge, 1);
+            rowGrid.Children.Add(browserBadge);
+
+            TextBlock visitsTb = new TextBlock {
+                Text = string.Format("{0} visit{1}", site.VisitCount, site.VisitCount == 1 ? "" : "s"),
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(visitsTb, 2);
+            rowGrid.Children.Add(visitsTb);
+
+            TextBlock timeTb = new TextBlock {
+                Text = site.LastVisitTimeFormatted ?? site.LastVisitTime.ToString("MMM dd HH:mm"),
+                FontSize = 10.5,
+                Foreground = Helpers.BrushFromHex(ThemeManager.TextSecondary),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(timeTb, 3);
+            rowGrid.Children.Add(timeTb);
+
+            StackPanel actionsSp = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+
+            Button openBtn = new Button {
+                Content = "↗",
+                ToolTip = "Open in default browser",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(0, 0, 4, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11,
+                Background = Helpers.BrushFromHex(ThemeManager.ButtonBg),
+                Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg),
+                BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder)
+            };
+            openBtn.Click += delegate(object s, RoutedEventArgs e) {
+                try {
+                    Process.Start(targetUrl);
+                } catch {}
+            };
+            actionsSp.Children.Add(openBtn);
+
+            Button copyBtn = new Button {
+                Content = "📋",
+                ToolTip = "Copy URL to clipboard",
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 2, 6, 2),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11,
+                Background = Helpers.BrushFromHex(ThemeManager.ButtonBg),
+                Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg),
+                BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder)
+            };
+            copyBtn.Click += delegate(object s, RoutedEventArgs e) {
+                try {
+                    Clipboard.SetText(targetUrl);
+                    copyBtn.Content = "✓";
+                } catch {}
+            };
+            actionsSp.Children.Add(copyBtn);
+
+            Grid.SetColumn(actionsSp, 4);
+            rowGrid.Children.Add(actionsSp);
+
+            rowBorder.Child = rowGrid;
+            return rowBorder;
+        }
+
+        private void RenderVisitedSitesRows() {
+            if (_visitedSitesRowsPanel == null) return;
+            _visitedSitesRowsPanel.Children.Clear();
+
+            string search = (_siteSearchBox != null && !string.IsNullOrEmpty(_siteSearchBox.Text)) ? _siteSearchBox.Text.Trim().ToLowerInvariant() : "";
+            string browserFilter = (_browserFilterCombo != null && _browserFilterCombo.SelectedItem != null) ? _browserFilterCombo.SelectedItem.ToString() : "All Browsers";
+
+            List<VisitedSiteRecord> filtered = new List<VisitedSiteRecord>();
+            for (int i = 0; i < _currentVisitedSites.Count; i++) {
+                VisitedSiteRecord s = _currentVisitedSites[i];
+                if (s == null) continue;
+
+                if (browserFilter != "All Browsers") {
+                    if (string.IsNullOrEmpty(s.Browser) || s.Browser.IndexOf(browserFilter, StringComparison.OrdinalIgnoreCase) < 0) {
+                        continue;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(search)) {
+                    bool matchUrl = (!string.IsNullOrEmpty(s.Url) && s.Url.ToLowerInvariant().Contains(search));
+                    bool matchTitle = (!string.IsNullOrEmpty(s.Title) && s.Title.ToLowerInvariant().Contains(search));
+                    bool matchDomain = (!string.IsNullOrEmpty(s.Domain) && s.Domain.ToLowerInvariant().Contains(search));
+                    if (!matchUrl && !matchTitle && !matchDomain) {
+                        continue;
+                    }
+                }
+
+                filtered.Add(s);
+            }
+
+            if (_visitedSitesSummaryText != null) {
+                int totalVisits = 0;
+                Dictionary<string, bool> uniqueDomains = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < filtered.Count; i++) {
+                    totalVisits += filtered[i].VisitCount;
+                    if (!string.IsNullOrEmpty(filtered[i].Domain)) {
+                        uniqueDomains[filtered[i].Domain] = true;
+                    }
+                }
+                _visitedSitesSummaryText.Text = string.Format("Showing {0} URLs across {1} domains • Total Visits: {2}",
+                    filtered.Count, uniqueDomains.Count, totalVisits);
+            }
+
+            if (filtered.Count == 0) {
+                Border emptyCard = new Border {
+                    Padding = new Thickness(16, 24, 16, 24),
+                    CornerRadius = new CornerRadius(8),
+                    Background = Helpers.BrushFromHex(ThemeManager.SubCardBg),
+                    Margin = new Thickness(0, 8, 0, 0)
+                };
+                StackPanel emptySp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+                TextBlock emptyIcon = new TextBlock {
+                    Text = "🌐",
+                    FontSize = 26,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 6)
+                };
+                TextBlock emptyMsg = new TextBlock {
+                    Text = string.IsNullOrEmpty(search) ? "No visited site URLs recorded for this period." : "No URLs matched your search query.",
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Helpers.BrushFromHex(ThemeManager.TextPrimary),
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                TextBlock emptySub = new TextBlock {
+                    Text = string.IsNullOrEmpty(search) ? "Visited sites from Microsoft Edge, Google Chrome, Mozilla Firefox, Brave, and Opera appear here." : "Try clearing or changing your search terms.",
+                    FontSize = 11,
+                    Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 3, 0, 0)
+                };
+                emptySp.Children.Add(emptyIcon);
+                emptySp.Children.Add(emptyMsg);
+                emptySp.Children.Add(emptySub);
+                emptyCard.Child = emptySp;
+                _visitedSitesRowsPanel.Children.Add(emptyCard);
+                return;
+            }
+
+            for (int i = 0; i < filtered.Count; i++) {
+                VisitedSiteRecord site = filtered[i];
+                Border rowBorder = CreateVisitedSiteRow(site, i);
+                _visitedSitesRowsPanel.Children.Add(rowBorder);
+            }
+        }
+
+        private void OnExportVisitedSitesCsvClicked(object sender, RoutedEventArgs e) {
+            SaveFileDialog dlg = new SaveFileDialog();
+            dlg.FileName = string.Format("NetPulse_VisitedSites_{0}_{1}.csv", _currentHistoryPreset, DateTime.Now.ToString("yyyyMMdd"));
+            dlg.Filter = "CSV Spreadsheet (*.csv)|*.csv|All Files (*.*)|*.*";
+            if (dlg.ShowDialog() == true) {
+                if (UsageStorage.Instance.ExportVisitedSitesToCsv(dlg.FileName, _currentHistoryPreset)) {
+                    MessageBox.Show("Visited sites report exported successfully!\nSaved to:\n" + dlg.FileName,
+                        "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                } else {
+                    MessageBox.Show("Could not export visited sites CSV. Please check permissions.", "Export Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 

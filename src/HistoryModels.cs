@@ -48,6 +48,42 @@ namespace NetPulse {
         }
     }
 
+    public class VisitedSiteRecord {
+        public string Url { get; set; }
+        public string Title { get; set; }
+        public string Domain { get; set; }
+        public string Browser { get; set; } // "Microsoft Edge", "Google Chrome", "Mozilla Firefox", etc.
+        public int VisitCount { get; set; }
+        public DateTime LastVisitTime { get; set; }
+        public string LastVisitTimeFormatted { get; set; }
+        public string Date { get; set; } // "yyyy-MM-dd"
+
+        public VisitedSiteRecord() {
+            Url = "";
+            Title = "";
+            Domain = "";
+            Browser = "Web Browser";
+            VisitCount = 1;
+            LastVisitTime = DateTime.Now;
+            LastVisitTimeFormatted = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            Date = DateTime.Today.ToString("yyyy-MM-dd");
+        }
+    }
+
+    public class DomainUsageRecord {
+        public string Domain { get; set; }
+        public int TotalVisits { get; set; }
+        public int UniqueUrlsCount { get; set; }
+        public DateTime LastVisited { get; set; }
+        public double Percentage { get; set; }
+        public string PrimaryBrowser { get; set; }
+
+        public DomainUsageRecord() {
+            Domain = "";
+            PrimaryBrowser = "";
+        }
+    }
+
     public class DayUsageRecord {
         public string Date { get; set; } // Format: "yyyy-MM-dd"
         public long TotalDownloaded { get; set; }
@@ -56,11 +92,13 @@ namespace NetPulse {
         public double PeakUploadSpeed { get; set; }
         public List<InterfaceUsageRecord> Interfaces { get; set; }
         public List<WifiNetworkUsageRecord> WifiNetworks { get; set; }
+        public List<VisitedSiteRecord> VisitedSites { get; set; }
 
         public DayUsageRecord() {
             Date = DateTime.Today.ToString("yyyy-MM-dd");
             Interfaces = new List<InterfaceUsageRecord>();
             WifiNetworks = new List<WifiNetworkUsageRecord>();
+            VisitedSites = new List<VisitedSiteRecord>();
         }
 
         public long TotalBytes {
@@ -124,6 +162,24 @@ namespace NetPulse {
                 if (ulSpeed > wifiNet.PeakUploadSpeed) wifiNet.PeakUploadSpeed = ulSpeed;
             }
         }
+
+        public void AddVisitedSite(VisitedSiteRecord site) {
+            if (site == null || string.IsNullOrEmpty(site.Url)) return;
+            if (VisitedSites == null) {
+                VisitedSites = new List<VisitedSiteRecord>();
+            }
+            for (int i = 0; i < VisitedSites.Count; i++) {
+                if (string.Equals(VisitedSites[i].Url, site.Url, StringComparison.OrdinalIgnoreCase)) {
+                    VisitedSites[i].VisitCount += site.VisitCount;
+                    if (site.LastVisitTime > VisitedSites[i].LastVisitTime) {
+                        VisitedSites[i].LastVisitTime = site.LastVisitTime;
+                        VisitedSites[i].LastVisitTimeFormatted = site.LastVisitTimeFormatted;
+                    }
+                    return;
+                }
+            }
+            VisitedSites.Add(site);
+        }
     }
 
     public class UsageDatabase {
@@ -171,11 +227,17 @@ namespace NetPulse {
         public List<DayUsageRecord> DailyRecords { get; set; }
         public List<InterfaceUsageRecord> InterfaceRecords { get; set; }
         public List<WifiNetworkUsageRecord> WifiNetworkBreakdown { get; set; }
+        public List<VisitedSiteRecord> VisitedSites { get; set; }
+        public List<DomainUsageRecord> TopDomains { get; set; }
+        public int TotalSiteVisits { get; set; }
+        public int UniqueDomainsCount { get; set; }
 
         public PeriodUsageSummary() {
             DailyRecords = new List<DayUsageRecord>();
             InterfaceRecords = new List<InterfaceUsageRecord>();
             WifiNetworkBreakdown = new List<WifiNetworkUsageRecord>();
+            VisitedSites = new List<VisitedSiteRecord>();
+            TopDomains = new List<DomainUsageRecord>();
         }
     }
 }

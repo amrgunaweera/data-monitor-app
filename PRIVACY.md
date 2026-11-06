@@ -8,8 +8,8 @@
 
 ### 1. Summary
 * **No app telemetry:** NetPulse does not send network statistics, Wi-Fi names, settings, diagnostic logs, or crash reports to the developer or to analytics or advertising services.
-* **Local processing:** Network information and usage history are processed and stored on your device. Wi-Fi names and other network identifiers may be sensitive, so the app does not transmit them.
-* **No packet inspection:** NetPulse reads Windows network-interface counters and connection details. It does not inspect packet contents, visited URLs, or communications.
+* **Local processing:** Network information, usage history, and visited site URLs are processed and stored strictly on your device. Network identifiers and browsing history are never transmitted.
+* **No network packet inspection & private browser history:** NetPulse reads Windows network-interface counters and connection details. It does not inspect packet payloads. Visited site URL history is read directly from your local browser databases (Edge, Chrome, Firefox, Brave, Opera) on this machine using native Windows SQLite. All data remains 100% offline and is never uploaded or shared.
 * **No app-operated server:** NetPulse does not connect to a developer-operated service for analytics, advertising, account management, or cloud storage.
 
 ---
@@ -28,9 +28,13 @@ The Application accesses and stores the following information locally on your de
    * Byte counters (bytes downloaded and uploaded) aggregated periodically.
    * Daily usage summaries and peak transfer speeds.
 4. **Application Settings:**
-   * Your chosen UI preferences (e.g., Theme preference, polling intervals, speed unit format, monthly data quota).
+   * Your chosen UI preferences (e.g., Theme preference, polling intervals, speed unit format, monthly data quota, visited sites history toggles).
 5. **Startup diagnostic log:**
    * If an unhandled application exception occurs, NetPulse may append its timestamp, exception message, and stack trace to a local `startup_error.log` file. This log is not sent to the developer.
+6. **Visited Site URL Usage History (Local):**
+   * If enabled in Settings (enabled by default), NetPulse reads visited URLs and page titles locally from installed browsers (Microsoft Edge, Google Chrome, Mozilla Firefox, Brave, Opera) using Windows' native `winsqlite3.dll`.
+   * Visited site URLs, page titles, visit counts, and visit timestamps are displayed in the Usage History tab and can be exported locally to CSV.
+   * This browsing data is never uploaded, transmitted, or shared with anyone. Users can disable tracking or clear data at any time from Settings.
 
 ---
 

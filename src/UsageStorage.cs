@@ -252,6 +252,130 @@ namespace NetPulse {
                 return b.TotalBytes.CompareTo(a.TotalBytes);
             });
 
+            if (AppSettings.Instance.EnableVisitedSitesHistory) {
+                try {
+                    List<VisitedSiteRecord> sites = VisitedSitesHelper.GetVisitedSites(preset, start, end, 500);
+                    Dictionary<string, VisitedSiteRecord> map = new Dictionary<string, VisitedSiteRecord>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < sites.Count; i++) {
+                        map[sites[i].Url] = sites[i];
+                    }
+
+                    for (int i = 0; i < summary.DailyRecords.Count; i++) {
+                        DayUsageRecord d = summary.DailyRecords[i];
+                        if (d != null && d.VisitedSites != null) {
+                            for (int j = 0; j < d.VisitedSites.Count; j++) {
+                                VisitedSiteRecord s = d.VisitedSites[j];
+                                if (s == null || string.IsNullOrEmpty(s.Url)) continue;
+                                VisitedSiteRecord existing;
+                                if (map.TryGetValue(s.Url, out existing)) {
+                                    if (s.LastVisitTime > existing.LastVisitTime) {
+                                        existing.LastVisitTime = s.LastVisitTime;
+                                        existing.LastVisitTimeFormatted = s.LastVisitTimeFormatted;
+                                    }
+                                } else {
+                                    map[s.Url] = s;
+                                }
+                            }
+                        }
+                    }
+
+                    List<VisitedSiteRecord> combined = new List<VisitedSiteRecord>(map.Values);
+                    combined.Sort(delegate(VisitedSiteRecord a, VisitedSiteRecord b) {
+                        int cmp = b.LastVisitTime.CompareTo(a.LastVisitTime);
+                        if (cmp == 0) return b.VisitCount.CompareTo(a.VisitCount);
+                        return cmp;
+                    });
+
+                    summary.VisitedSites = combined;
+                    summary.TopDomains = VisitedSitesHelper.AggregateDomains(combined);
+                    summary.UniqueDomainsCount = summary.TopDomains.Count;
+
+                    int totalVisits = 0;
+                    for (int i = 0; i < combined.Count; i++) {
+                        totalVisits += combined[i].VisitCount;
+                    }
+                    summary.TotalSiteVisits = totalVisits;
+                } catch {}
+            }
+
+            return summary;
+        }
+
+        public PeriodUsageSummary GetSummaryForSsid(TimeRangePreset preset, string ssid) {
+            DateTime start, end;
+            string rangeLabel;
+            GetDateRange(preset, out start, out end, out rangeLabel);
+
+            PeriodUsageSummary summary = new PeriodUsageSummary {
+                Preset = preset,
+                StartDate = start,
+                EndDate = end,
+                DateRangeLabel = rangeLabel
+            };
+
+            if (string.IsNullOrEmpty(ssid)) return summary;
+
+            WifiNetworkUsageRecord aggNet = new WifiNetworkUsageRecord { Ssid = ssid };
+
+            lock (_lock) {
+                DateTime cur = start;
+                while (cur <= end) {
+                    string dateKey = cur.ToString("yyyy-MM-dd");
+                    DayUsageRecord day;
+                    if (_recordsByDate.TryGetValue(dateKey, out day)) {
+                        WifiNetworkUsageRecord netRec = null;
+                        if (day.WifiNetworks != null) {
+                            for (int i = 0; i < day.WifiNetworks.Count; i++) {
+                                if (string.Equals(day.WifiNetworks[i].Ssid, ssid, StringComparison.OrdinalIgnoreCase)) {
+                                    netRec = day.WifiNetworks[i];
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (netRec != null && netRec.TotalBytes > 0) {
+                            DayUsageRecord dayForSsid = new DayUsageRecord {
+                                Date = dateKey,
+                                TotalDownloaded = netRec.BytesDownloaded,
+                                TotalUploaded = netRec.BytesUploaded,
+                                PeakDownloadSpeed = netRec.PeakDownloadSpeed,
+                                PeakUploadSpeed = netRec.PeakUploadSpeed,
+                                WifiNetworks = new List<WifiNetworkUsageRecord> { netRec }
+                            };
+                            summary.DailyRecords.Add(dayForSsid);
+                            summary.TotalDownloaded += netRec.BytesDownloaded;
+                            summary.TotalUploaded += netRec.BytesUploaded;
+
+                            if (netRec.TotalBytes > summary.PeakDayBytes) {
+                                summary.PeakDayBytes = netRec.TotalBytes;
+                                summary.PeakDayDate = dateKey;
+                            }
+
+                            aggNet.BytesDownloaded += netRec.BytesDownloaded;
+                            aggNet.BytesUploaded += netRec.BytesUploaded;
+                            if (netRec.PeakDownloadSpeed > aggNet.PeakDownloadSpeed) aggNet.PeakDownloadSpeed = netRec.PeakDownloadSpeed;
+                            if (netRec.PeakUploadSpeed > aggNet.PeakUploadSpeed) aggNet.PeakUploadSpeed = netRec.PeakUploadSpeed;
+                        } else {
+                            summary.DailyRecords.Add(new DayUsageRecord { Date = dateKey });
+                        }
+                    } else {
+                        summary.DailyRecords.Add(new DayUsageRecord { Date = dateKey });
+                    }
+                    cur = cur.AddDays(1);
+                }
+            }
+
+            int daysCount = (int)(end - start).TotalDays + 1;
+            if (daysCount < 1) daysCount = 1;
+            summary.DailyAverageBytes = (double)summary.TotalBytes / daysCount;
+
+            summary.WifiDownloaded = summary.TotalDownloaded;
+            summary.WifiUploaded = summary.TotalUploaded;
+            summary.EthernetDownloaded = 0;
+            summary.EthernetUploaded = 0;
+
+            summary.WifiNetworkBreakdown.Add(aggNet);
+
             return summary;
         }
 
@@ -328,6 +452,53 @@ namespace NetPulse {
             SaveToDisk(true);
         }
 
+        public bool DeleteWifiNetwork(string ssid, bool deductFromTotals) {
+            if (string.IsNullOrEmpty(ssid)) return false;
+
+            bool removedAny = false;
+            lock (_lock) {
+                foreach (DayUsageRecord day in _recordsByDate.Values) {
+                    if (day.WifiNetworks == null || day.WifiNetworks.Count == 0) continue;
+
+                    for (int i = day.WifiNetworks.Count - 1; i >= 0; i--) {
+                        WifiNetworkUsageRecord net = day.WifiNetworks[i];
+                        if (net != null && string.Equals(net.Ssid, ssid, StringComparison.OrdinalIgnoreCase)) {
+                            removedAny = true;
+                            long netDl = net.BytesDownloaded;
+                            long netUl = net.BytesUploaded;
+
+                            day.WifiNetworks.RemoveAt(i);
+
+                            if (deductFromTotals) {
+                                day.TotalDownloaded = Math.Max(0, day.TotalDownloaded - netDl);
+                                day.TotalUploaded = Math.Max(0, day.TotalUploaded - netUl);
+
+                                if (day.Interfaces != null) {
+                                    for (int j = 0; j < day.Interfaces.Count; j++) {
+                                        InterfaceUsageRecord iface = day.Interfaces[j];
+                                        if (iface != null && string.Equals(iface.InterfaceType, "Wi-Fi", StringComparison.OrdinalIgnoreCase)) {
+                                            iface.BytesDownloaded = Math.Max(0, iface.BytesDownloaded - netDl);
+                                            iface.BytesUploaded = Math.Max(0, iface.BytesUploaded - netUl);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (removedAny) {
+                    _isDirty = true;
+                }
+            }
+
+            if (removedAny) {
+                SaveToDisk(true);
+            }
+
+            return removedAny;
+        }
+
         public bool ExportToCsv(string filePath, TimeRangePreset preset) {
             try {
                 PeriodUsageSummary summary = GetSummary(preset);
@@ -371,6 +542,48 @@ namespace NetPulse {
                             Helpers.FormatBytes(net.BytesUploaded),
                             Helpers.FormatBytes(net.TotalBytes),
                             share);
+                    }
+                }
+
+                if (AppSettings.Instance.IncludeVisitedSitesInExport && summary.VisitedSites != null && summary.VisitedSites.Count > 0) {
+                    sb.AppendLine();
+                    sb.AppendLine("VISITED SITES & URL USAGE HISTORY");
+                    sb.AppendLine("Domain,Page Title,URL,Browser,Visit Count,Last Visited");
+                    for (int i = 0; i < summary.VisitedSites.Count; i++) {
+                        VisitedSiteRecord s = summary.VisitedSites[i];
+                        sb.AppendFormat("\"{0}\",\"{1}\",\"{2}\",\"{3}\",{4},\"{5}\"\r\n",
+                            (s.Domain ?? "").Replace("\"", "\"\""),
+                            (s.Title ?? "").Replace("\"", "\"\""),
+                            (s.Url ?? "").Replace("\"", "\"\""),
+                            (s.Browser ?? "").Replace("\"", "\"\""),
+                            s.VisitCount,
+                            s.LastVisitTimeFormatted ?? s.LastVisitTime.ToString("yyyy-MM-dd HH:mm"));
+                    }
+                }
+
+                File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        public bool ExportVisitedSitesToCsv(string filePath, TimeRangePreset preset) {
+            try {
+                PeriodUsageSummary summary = GetSummary(preset);
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine("Domain,Page Title,URL,Browser,Visit Count,Last Visited");
+
+                if (summary.VisitedSites != null) {
+                    for (int i = 0; i < summary.VisitedSites.Count; i++) {
+                        VisitedSiteRecord s = summary.VisitedSites[i];
+                        sb.AppendFormat("\"{0}\",\"{1}\",\"{2}\",\"{3}\",{4},\"{5}\"\r\n",
+                            (s.Domain ?? "").Replace("\"", "\"\""),
+                            (s.Title ?? "").Replace("\"", "\"\""),
+                            (s.Url ?? "").Replace("\"", "\"\""),
+                            (s.Browser ?? "").Replace("\"", "\"\""),
+                            s.VisitCount,
+                            s.LastVisitTimeFormatted ?? s.LastVisitTime.ToString("yyyy-MM-dd HH:mm"));
                     }
                 }
 

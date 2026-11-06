@@ -528,9 +528,9 @@ namespace NetPulse.Controls {
                     Padding = new Thickness(8, 6, 8, 6),
                     Margin = new Thickness(0, 0, 0, 4),
                     CornerRadius = new CornerRadius(6),
-                    Background = Helpers.BrushFromHex(isCurrent ? ThemeManager.CardBg : "Transparent"),
-                    BorderThickness = new Thickness(isCurrent ? 1 : 0),
-                    BorderBrush = Helpers.BrushFromHex(isCurrent ? ThemeManager.WifiBadgeBorder : "Transparent")
+                    Background = Helpers.BrushFromHex(isCurrent ? ThemeManager.CardBg : ThemeManager.SubCardBg),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = Helpers.BrushFromHex(isCurrent ? (ThemeManager.IsDark ? "#059669" : "#6EE7B7") : ThemeManager.CardBorder)
                 };
 
                 StackPanel rowSp = new StackPanel();

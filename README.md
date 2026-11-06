@@ -17,8 +17,9 @@
    - [Live Dashboard View](#1-live-dashboard-view)
    - [Usage History & Analytics](#2-usage-history--analytics)
    - [Wi-Fi Network (SSID) Breakdown Engine](#3-wi-fi-network-ssid-breakdown-engine)
-   - [Settings & Preferences Management](#4-settings--preferences-management)
-   - [System Tray & Windows Integration](#5-system-tray--windows-integration)
+   - [Visited Site URL List Usage History Engine](#4-visited-site-url-list-usage-history-engine)
+   - [Settings & Preferences Management](#5-settings--preferences-management)
+   - [System Tray & Windows Integration](#6-system-tray--windows-integration)
 4. [Data Storage & Schema Specifications](#-data-storage--schema-specifications)
    - [Usage History Schema (`usage_history.json`)](#usage-history-schema)
    - [Configuration Schema (`settings.json`)](#configuration-schema)
@@ -187,13 +188,73 @@ NetPulse features an integrated Wi-Fi attribution engine:
   * Extracts the raw `DOT11_SSID` byte array and decodes it using UTF-8 / ASCII.
   * If the WLAN service is unavailable (e.g., in sandboxed containers), safely falls back to executing and parsing `netsh wlan show interfaces`.
   * Implements a 3.0-second caching mechanism so repeated polling cycles incur zero operating system overhead.
-* **Data Attribution:**
+* **Data Attribution & Interactive SSID Inspection:**
   * Every byte transferred on a Wi-Fi interface is simultaneously attributed to both the physical adapter and the connected SSID.
   * If the device transitions from `Office-WiFi` to `Mobile-Hotspot`, traffic is partitioned accurately without data overlap.
+  * **Interactive Network Selection & Deep Inspection:**
+    * Users can click any Wi-Fi network card in the **WI-FI NETWORKS (BY SSID)** list.
+    * The clicked network is highlighted with an accent border, tinted background, `Selected ✓` badge, and an inline quick-drawer showing recorded peak download/upload speeds.
+    * A **Network Details Inspector** banner appears above the daily log displaying the network name, connection status (Active vs. Saved), total usage, recv/sent breakdown, recorded peak speeds, and percentage share of Wi-Fi traffic.
+    * The daily log table, historical chart, and KPI summary automatically filter to show data exclusive to that SSID.
+    * A 1-click `[ ✕ Show All ]` / `[ ✕ Show All Networks ]` button (or clicking the card again) instantly clears the filter and restores the multi-network view.
+  * **Delete Unnecessary Networks:**
+    * Users can cleanly delete any unwanted or temporary network (e.g., public hotspots, one-time guest networks) directly from history:
+      * **Right-Click Context Menu:** Right-click any Wi-Fi network card and select `🗑 Delete "<SSID>" from History`.
+    * A standard confirmation dialog protects against accidental deletion. Upon confirmation, the SSID and its attributed data are cleanly removed from storage across all historical days, with totals, Wi-Fi interface summaries, and charts recalculated and saved immediately.
 
 ---
 
-### 4. Settings & Preferences Management
+### 4. Visited Site URL List Usage History Engine
+
+NetPulse provides deep visibility into web browsing activity alongside network bandwidth consumption:
+
+```
+                               ┌──────────────────────────────────────────┐
+                               │           VisitedSitesHelper.cs          │
+                               │        Native Windows SQLite Engine      │
+                               └────────────────────┬─────────────────────┘
+                                                    │
+                         ┌──────────────────────────┴──────────────────────────┐
+                         │                                                     │
+             [Chromium-Based Browsers]                                 [Mozilla Firefox]
+             Edge, Chrome, Brave, Opera, Vivaldi                       Places SQLite Architecture
+                         │                                                     │
+             Extracts from History database                            Extracts from places.sqlite
+             (Safe snapshot with WAL support)                          (Safe snapshot with WAL support)
+                         │                                                     │
+                         └──────────────────────────┬──────────────────────────┘
+                                                    │
+                                   Filter by Time Range Preset
+                       (Today, Yesterday, Last 7 Days, This Month, All Time)
+                                                    │
+                                     Deduplicate & Group by URL
+                                     Extract Domain (e.g. "github.com")
+                                     Calculate Total Visits & Last Visit Time
+                                                    │
+                         ┌──────────────────────────┴──────────────────────────┐
+                         │                                                     │
+                                                                 Right History Panel:
+                                                                 - Switchable Sub-View:
+             - Top domains ranked by visits                        - [📊 Daily Data Log]
+             - Visit share percentage & visual bars                - [🌐 Visited Sites & URLs (<count>)]
+                                                                 - Real-time search by URL, Title, Domain
+                                                                   - Browser filter dropdown (Edge, Chrome, FF...)
+                                                                   - 1-click Open Site ↗ & Copy URL 📋
+                                                                   - Dedicated CSV Export (📁 Export URLs)
+```
+
+* **Zero External Dependencies:**
+  * Uses native Windows P/Invoke to `winsqlite3.dll` (shipped with Windows 10 & 11) to read local browser databases. No external NuGet packages or SQLite runtime files required.
+* **Multi-Browser Discovery:**
+  * Automatically discovers profiles across **Microsoft Edge**, **Google Chrome**, **Mozilla Firefox**, **Brave Browser**, **Opera**, **Opera GX**, and **Vivaldi**.
+* **Lock-Free Safe File Copying:**
+  * Uses `FileStream` with `FileShare.ReadWrite | FileShare.Delete` and temporary shadow snapshots to safely query browser databases even while browsers are actively running.
+* **100% Offline & Private:**
+  * Browsing history never leaves the local machine. NetPulse contains zero telemetry, zero analytics, and zero external network transmission.
+
+---
+
+### 5. Settings & Preferences Management
 
 The Settings tab (`BuildSettingsView`) provides deep control over the application's behavior and appearance:
 
@@ -207,12 +268,15 @@ The Settings tab (`BuildSettingsView`) provides deep control over the applicatio
 | | **Speed Units Display** | Formats rates as `Auto (B/s, KB/s, MB/s, GB/s)`, `Bits (bps, Kbps, Mbps, Gbps)`, or strict `Bytes (B/s, KB/s, MB/s)`. |
 | | **Hide Inactive Adapters** | Toggles filtering of disconnected/dormant adapters from the Live Dashboard. |
 | **Appearance & Theme** | **Theme Mode** | Three-way segmented selection: `🖥 System (Auto)`, `🌙 Dark Mode`, or `☀️ Light Mode`. |
+| **Visited Sites History** | **Track Visited Site URLs** | Enables extracting and analyzing visited site URLs and titles from local web browser databases. |
+| | **Include in CSV Exports** | Toggles whether visited site URLs and visit counts are appended to exported usage CSV reports. |
+| | **Refresh Cache Now** | Button to immediately reload and recalculate browser history from local databases. |
 | **Monthly Quota** | **Monthly Quota (GB)** | Configurable data cap (e.g., 100 GB) with billing cycle reset day (1st – 31st). Includes live visual progress gauge with warning thresholds (Green < 75%, Amber 75–90%, Red > 90%). |
 | **Storage & Privacy** | **Data Management** | Displays real-time storage file size; provides 1-click buttons to `Open Folder`, `Export All Data (CSV)`, and `Clear All Data`. |
 
 ---
 
-### 5. System Tray & Windows Integration
+### 6. System Tray & Windows Integration
 
 * **Notification Area Icon (`NotifyIcon`):**
   * NetPulse docks cleanly into the Windows Notification Area with a high-resolution embedded application icon (`app.ico`).
@@ -384,7 +448,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ### Direct CLI Compiler Command
 If building manually via Command Prompt:
 ```cmd
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /optimize+ /win32icon:app.ico /win32manifest:app.manifest /out:DataMonitor.exe /lib:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF","C:\Windows\Microsoft.NET\Framework64\v4.0.30319" /r:PresentationFramework.dll,PresentationCore.dll,WindowsBase.dll,System.Xaml.dll,System.dll,System.Core.dll,System.Drawing.dll,System.Web.Extensions.dll,System.Windows.Forms.dll src\Helpers.cs src\AppSettings.cs src\WifiNetworkHelper.cs src\ThemeManager.cs src\Models.cs src\HistoryModels.cs src\UsageStorage.cs src\NetworkMonitor.cs src\Controls\RealtimeChart.cs src\Controls\HistoricalBarChart.cs src\Controls\InterfaceCardControl.cs src\MainWindow.cs src\Program.cs
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /optimize+ /win32icon:app.ico /win32manifest:app.manifest /out:DataMonitor.exe /lib:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF","C:\Windows\Microsoft.NET\Framework64\v4.0.30319" /r:PresentationFramework.dll,PresentationCore.dll,WindowsBase.dll,System.Xaml.dll,System.dll,System.Core.dll,System.Drawing.dll,System.Web.Extensions.dll,System.Windows.Forms.dll src\Helpers.cs src\AppSettings.cs src\WifiNetworkHelper.cs src\VisitedSitesHelper.cs src\ThemeManager.cs src\Models.cs src\HistoryModels.cs src\UsageStorage.cs src\NetworkMonitor.cs src\Controls\RealtimeChart.cs src\Controls\HistoricalBarChart.cs src\Controls\InterfaceCardControl.cs src\MainWindow.cs src\Program.cs
 ```
 
 ---
@@ -411,6 +475,7 @@ data-monitor-app/
     ├── MainWindow.cs            # Root UI layout, triple-tab coordinator & DWM title bar styling
     ├── NetworkMonitor.cs        # Periodic network polling engine & interface tracker
     ├── WifiNetworkHelper.cs     # Native Win32 WLAN API (wlanapi.dll) P/Invoke & SSID detection
+    ├── VisitedSitesHelper.cs    # Native Windows SQLite (winsqlite3.dll) multi-browser history extractor
     ├── UsageStorage.cs          # Thread-safe persistent JSON storage engine & CSV exporter
     ├── HistoryModels.cs         # Historical daily records, SSID usage records & period summaries
     ├── AppSettings.cs           # Persistent settings manager & Windows startup registry handler
