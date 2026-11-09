@@ -46,9 +46,12 @@ namespace NetPulse {
         private TextBlock _versionBadgeText;
 
         // Navigation Tabs
+        private Border _navTabsContainer;
         private Button _navLiveBtn;
         private Button _navHistoryBtn;
         private Button _navSettingsBtn;
+
+        private Grid _historyBottomGrid;
 
         // Header status badges & actions
         private Border _liveBadge;
@@ -228,9 +231,16 @@ namespace NetPulse {
             Title = "NetPulse — Windows Network Data Monitor & History";
             Width = 1160;
             Height = 850;
-            MinWidth = 980;
-            MinHeight = 690;
+            MinWidth = 820;
+            MinHeight = 560;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
+            FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI, -apple-system, sans-serif");
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
+            RenderOptions.SetClearTypeHint(this, ClearTypeHint.Enabled);
+            SnapsToDevicePixels = true;
+            UseLayoutRounding = true;
 
             string icoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico"); if (System.IO.File.Exists(icoPath)) {
                 try {
@@ -257,6 +267,7 @@ namespace NetPulse {
 
             Loaded += OnWindowLoaded;
             Closing += OnWindowClosing;
+            SizeChanged += OnWindowSizeChanged;
 
             BuildUI();
             ApplyTheme();
@@ -274,6 +285,43 @@ namespace NetPulse {
 
             if (settings.StartMinimized) {
                 WindowState = WindowState.Minimized;
+            }
+        }
+
+        private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e) {
+            double w = ActualWidth;
+            double h = ActualHeight;
+
+            // Header responsive adaptation
+            if (_subtitleText != null) {
+                _subtitleText.Visibility = (w < 920) ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (_navTabsContainer != null) {
+                Thickness tabPad = (w < 900) ? new Thickness(10, 5, 10, 5) : new Thickness(14, 7, 14, 7);
+                if (_navLiveBtn != null) _navLiveBtn.Padding = tabPad;
+                if (_navHistoryBtn != null) _navHistoryBtn.Padding = tabPad;
+                if (_navSettingsBtn != null) _navSettingsBtn.Padding = tabPad;
+            }
+
+            // History view responsive adaptation
+            if (_historyBottomGrid != null && _historyBottomGrid.ColumnDefinitions.Count >= 2) {
+                if (w < 960) {
+                    _historyBottomGrid.ColumnDefinitions[0].Width = new GridLength(280);
+                } else if (w >= 1250) {
+                    _historyBottomGrid.ColumnDefinitions[0].Width = new GridLength(350);
+                } else {
+                    _historyBottomGrid.ColumnDefinitions[0].Width = new GridLength(310);
+                }
+            }
+
+            // Live view chart responsive height
+            if (_chartCard != null) {
+                if (h < 680) {
+                    _chartCard.Height = 170;
+                } else {
+                    _chartCard.Height = 210;
+                }
             }
         }
 
@@ -486,12 +534,14 @@ namespace NetPulse {
                 btn.Background = Helpers.BrushFromHex(ThemeManager.TabActiveBg);
                 btn.Foreground = Helpers.BrushFromHex(ThemeManager.TabActiveFg);
                 btn.BorderBrush = Helpers.BrushFromHex(ThemeManager.TabActiveBorder);
+                btn.BorderThickness = new Thickness(1);
                 btn.FontWeight = FontWeights.Bold;
             } else {
-                btn.Background = Helpers.BrushFromHex(ThemeManager.TabInactiveBg);
+                btn.Background = Brushes.Transparent;
                 btn.Foreground = Helpers.BrushFromHex(ThemeManager.TabInactiveFg);
-                btn.BorderBrush = Helpers.BrushFromHex(ThemeManager.TabInactiveBorder);
-                btn.FontWeight = FontWeights.Normal;
+                btn.BorderBrush = Brushes.Transparent;
+                btn.BorderThickness = new Thickness(1);
+                btn.FontWeight = FontWeights.SemiBold;
             }
         }
 
@@ -504,6 +554,11 @@ namespace NetPulse {
             _versionBadge.Background = Helpers.BrushFromHex(ThemeManager.BadgeBg);
             _versionBadge.BorderBrush = Helpers.BrushFromHex(ThemeManager.BadgeBorder);
             _versionBadgeText.Foreground = Helpers.BrushFromHex(ThemeManager.TotalColor);
+
+            if (_navTabsContainer != null) {
+                _navTabsContainer.Background = Helpers.BrushFromHex(ThemeManager.SubCardBg);
+                _navTabsContainer.BorderBrush = Helpers.BrushFromHex(ThemeManager.CardBorder);
+            }
 
             ApplyTabButtonStyles();
 
@@ -767,7 +822,9 @@ namespace NetPulse {
             _subtitleText = new TextBlock {
                 Text = "Real-time bandwidth & persistent daily, weekly, monthly usage analytics",
                 FontSize = 11.5,
-                Margin = new Thickness(0, 3, 0, 0)
+                Margin = new Thickness(0, 3, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 420
             };
 
             titlePanel.Children.Add(logoRow);
@@ -775,12 +832,20 @@ namespace NetPulse {
             Grid.SetColumn(titlePanel, 0);
             headerGrid.Children.Add(titlePanel);
 
-            // Center: Navigation Tabs
+            // Center: Navigation Tabs (Modern Segmented Pill)
+            _navTabsContainer = new Border {
+                CornerRadius = new CornerRadius(10),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(4),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 12, 0)
+            };
+
             StackPanel navTabsPanel = new StackPanel {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(16, 0, 16, 0)
+                VerticalAlignment = VerticalAlignment.Center
             };
 
             _navLiveBtn = CreateTabButton("⚡ Live Dashboard", 0);
@@ -790,8 +855,9 @@ namespace NetPulse {
             navTabsPanel.Children.Add(_navLiveBtn);
             navTabsPanel.Children.Add(_navHistoryBtn);
             navTabsPanel.Children.Add(_navSettingsBtn);
-            Grid.SetColumn(navTabsPanel, 1);
-            headerGrid.Children.Add(navTabsPanel);
+            _navTabsContainer.Child = navTabsPanel;
+            Grid.SetColumn(_navTabsContainer, 1);
+            headerGrid.Children.Add(_navTabsContainer);
 
             // Right: Live badges and utility actions
             StackPanel actionsPanel = new StackPanel {
@@ -840,11 +906,15 @@ namespace NetPulse {
                 Content = "↻",
                 ToolTip = "Reset Session Traffic",
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(10, 4, 10, 4),
+                Width = 28,
+                Height = 28,
+                Padding = new Thickness(0),
                 FontSize = 13,
                 FontWeight = FontWeights.Bold,
-                Cursor = System.Windows.Input.Cursors.Hand
+                Cursor = System.Windows.Input.Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
             };
+            Helpers.StyleButton(_resetBtn, 14);
             _resetBtn.Click += delegate(object s, RoutedEventArgs e) {
                 _monitor.ResetSession();
                 OnTimerTick(null, null);
@@ -885,10 +955,11 @@ namespace NetPulse {
                 Content = text,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(14, 7, 14, 7),
-                Margin = new Thickness(0, 0, 6, 0),
+                Margin = new Thickness(0, 0, 4, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 12
             };
+            Helpers.StyleButton(btn, 8);
             btn.Click += delegate(object s, RoutedEventArgs e) { SwitchTab(tabIndex); };
             return btn;
         }
@@ -1110,8 +1181,9 @@ namespace NetPulse {
                 FontSize = 10.5,
                 FontWeight = FontWeights.SemiBold,
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Padding = new Thickness(0)
+                Padding = new Thickness(6, 2, 6, 2)
             };
+            Helpers.StyleButton(_viewHistoryQuickBtn, 6);
             _viewHistoryQuickBtn.Click += delegate(object s, RoutedEventArgs e) { SwitchTab(1); };
             Grid.SetColumn(_viewHistoryQuickBtn, 1);
             header.Children.Add(_viewHistoryQuickBtn);
@@ -1169,10 +1241,15 @@ namespace NetPulse {
             historyGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
             Grid controlBar = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-            controlBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             controlBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             controlBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            ScrollViewer presetsScroll = new ScrollViewer {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center
+            };
             StackPanel presetsPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
             _presetButtons.Clear();
@@ -1187,8 +1264,9 @@ namespace NetPulse {
             for (int i = 0; i < _presetButtons.Count; i++) {
                 presetsPanel.Children.Add(_presetButtons[i]);
             }
-            Grid.SetColumn(presetsPanel, 0);
-            controlBar.Children.Add(presetsPanel);
+            presetsScroll.Content = presetsPanel;
+            Grid.SetColumn(presetsScroll, 0);
+            controlBar.Children.Add(presetsScroll);
 
             StackPanel rightActions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
@@ -1213,10 +1291,11 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_exportCsvBtn, 8);
             _exportCsvBtn.Click += OnExportCsvClicked;
             rightActions.Children.Add(_exportCsvBtn);
 
-            Grid.SetColumn(rightActions, 2);
+            Grid.SetColumn(rightActions, 1);
             controlBar.Children.Add(rightActions);
 
             Grid.SetRow(controlBar, 0);
@@ -1293,9 +1372,9 @@ namespace NetPulse {
             Grid.SetRow(_historyChartCard, 2);
             historyGrid.Children.Add(_historyChartCard);
 
-            Grid bottomGrid = new Grid();
-            bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
-            bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            _historyBottomGrid = new Grid();
+            _historyBottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(310) });
+            _historyBottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             ScrollViewer leftScroll = new ScrollViewer {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1349,6 +1428,7 @@ namespace NetPulse {
                 FontWeight = FontWeights.SemiBold,
                 Visibility = Visibility.Collapsed
             };
+            Helpers.StyleButton(_clearWifiFilterBtn, 6);
             _clearWifiFilterBtn.Click += delegate(object s, RoutedEventArgs e) {
                 _selectedWifiSsid = null;
                 RefreshHistoryView();
@@ -1389,7 +1469,7 @@ namespace NetPulse {
 
             leftScroll.Content = leftPanel;
             Grid.SetColumn(leftScroll, 0);
-            bottomGrid.Children.Add(leftScroll);
+            _historyBottomGrid.Children.Add(leftScroll);
 
             _tableCard = new Border {
                 BorderThickness = new Thickness(1),
@@ -1414,6 +1494,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_tabDailyTrafficBtn, 8);
             _tabDailyTrafficBtn.Click += delegate(object s, RoutedEventArgs e) { SwitchHistorySubView(0); };
             subTabsSp.Children.Add(_tabDailyTrafficBtn);
 
@@ -1424,6 +1505,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_tabVisitedSitesBtn, 8);
             _tabVisitedSitesBtn.Click += delegate(object s, RoutedEventArgs e) { SwitchHistorySubView(1); };
             subTabsSp.Children.Add(_tabVisitedSitesBtn);
 
@@ -1498,6 +1580,7 @@ namespace NetPulse {
                 FontSize = 10.5,
                 FontWeight = FontWeights.SemiBold
             };
+            Helpers.StyleButton(_inspectorClearBtn, 6);
             _inspectorClearBtn.Click += delegate(object s, RoutedEventArgs e) {
                 _selectedWifiSsid = null;
                 RefreshHistoryView();
@@ -1577,7 +1660,7 @@ namespace NetPulse {
 
             StackPanel siteFiltersSp = new StackPanel { Orientation = Orientation.Horizontal };
             _siteSearchBox = new TextBox {
-                Width = 230,
+                Width = 190,
                 Height = 28,
                 FontSize = 11.5,
                 Padding = new Thickness(8, 4, 8, 4),
@@ -1619,6 +1702,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_refreshSitesBtn, 8);
             _refreshSitesBtn.Click += delegate(object s, RoutedEventArgs e) {
                 RefreshHistoryView();
             };
@@ -1632,6 +1716,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_exportSitesCsvBtn, 8);
             _exportSitesCsvBtn.Click += OnExportVisitedSitesCsvClicked;
             siteActionsSp.Children.Add(_exportSitesCsvBtn);
             Grid.SetColumn(siteActionsSp, 1);
@@ -1643,10 +1728,10 @@ namespace NetPulse {
             // Table Header Grid
             Grid siteTh = new Grid { Margin = new Thickness(8, 0, 8, 6) };
             siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
-            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(75) });
-            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(135) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(85) });
             siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(115) });
+            siteTh.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });
 
             TextBlock sh1 = new TextBlock { Text = "PAGE TITLE & URL", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
             TextBlock sh2 = new TextBlock { Text = "BROWSER", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Helpers.BrushFromHex(ThemeManager.TextMuted) };
@@ -1692,10 +1777,10 @@ namespace NetPulse {
 
             _tableCard.Child = tableInner;
             Grid.SetColumn(_tableCard, 1);
-            bottomGrid.Children.Add(_tableCard);
+            _historyBottomGrid.Children.Add(_tableCard);
 
-            Grid.SetRow(bottomGrid, 3);
-            historyGrid.Children.Add(bottomGrid);
+            Grid.SetRow(_historyBottomGrid, 3);
+            historyGrid.Children.Add(_historyBottomGrid);
 
             return historyGrid;
         }
@@ -1710,6 +1795,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(btn, 8);
             btn.Click += delegate(object s, RoutedEventArgs e) {
                 _currentHistoryPreset = preset;
                 UpdatePresetButtonsTheme();
@@ -2008,6 +2094,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_refreshVisitedSitesSettingsBtn, 8);
             _refreshVisitedSitesSettingsBtn.Click += delegate(object s, RoutedEventArgs e) {
                 RefreshHistoryView();
                 MessageBox.Show("Visited sites history refreshed from local browser databases.", "History Refreshed", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -2142,6 +2229,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_openFolderBtn, 8);
             _openFolderBtn.Click += delegate(object s, RoutedEventArgs e) {
                 try {
                     string dir = Path.GetDirectoryName(UsageStorage.Instance.StorageFilePath);
@@ -2160,6 +2248,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_exportAllDataBtn, 8);
             _exportAllDataBtn.Click += OnExportCsvClicked;
             btnRow.Children.Add(_exportAllDataBtn);
 
@@ -2170,6 +2259,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11
             };
+            Helpers.StyleButton(_settingsClearDataBtn, 8);
             _settingsClearDataBtn.Click += OnClearHistoryClicked;
             btnRow.Children.Add(_settingsClearDataBtn);
 
@@ -2239,7 +2329,8 @@ namespace NetPulse {
             TextBlock tb = new TextBlock {
                 Text = title + " — " + description,
                 FontSize = 11,
-                FontWeight = FontWeights.SemiBold
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap
             };
             _settingsLabels.Add(tb);
             return tb;
@@ -2255,11 +2346,13 @@ namespace NetPulse {
             TextBlock titleBlock = new TextBlock {
                 Text = title,
                 FontSize = 11.5,
-                FontWeight = FontWeights.SemiBold
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap
             };
             TextBlock descBlock = new TextBlock {
                 Text = description,
-                FontSize = 10.5
+                FontSize = 10.5,
+                TextWrapping = TextWrapping.Wrap
             };
 
             _settingsLabels.Add(titleBlock);
@@ -2285,6 +2378,7 @@ namespace NetPulse {
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FontSize = 11.5
             };
+            Helpers.StyleButton(btn, 8);
             btn.Click += delegate(object s, RoutedEventArgs e) {
                 AppSettings.Instance.ThemePreference = mode;
                 AppSettings.Instance.Save();
@@ -2927,10 +3021,10 @@ namespace NetPulse {
 
             Grid rowGrid = new Grid();
             rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(75) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(135) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(85) });
             rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(115) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });
 
             StackPanel titleUrlSp = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
             TextBlock titleTb = new TextBlock {
@@ -2999,6 +3093,7 @@ namespace NetPulse {
                 Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg),
                 BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder)
             };
+            Helpers.StyleButton(openBtn, 4);
             openBtn.Click += delegate(object s, RoutedEventArgs e) {
                 try {
                     Process.Start(targetUrl);
@@ -3017,6 +3112,7 @@ namespace NetPulse {
                 Foreground = Helpers.BrushFromHex(ThemeManager.ButtonFg),
                 BorderBrush = Helpers.BrushFromHex(ThemeManager.ButtonBorder)
             };
+            Helpers.StyleButton(copyBtn, 4);
             copyBtn.Click += delegate(object s, RoutedEventArgs e) {
                 try {
                     Clipboard.SetText(targetUrl);

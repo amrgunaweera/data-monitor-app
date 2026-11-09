@@ -1,5 +1,9 @@
 using System;
 using System.Globalization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace NetPulse {
@@ -120,6 +124,42 @@ namespace NetPulse {
                 return string.Format("{0:0.#} Gbps", mbps / 1000.0);
             }
             return string.Format("{0:0} Mbps", mbps);
+        }
+
+        public static ControlTemplate CreateButtonTemplate(double cornerRadius) {
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
+            border.Name = "btnBorder";
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(cornerRadius));
+            border.SetBinding(Border.BackgroundProperty, new Binding("Background") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
+            border.SetBinding(Border.BorderBrushProperty, new Binding("BorderBrush") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
+            border.SetBinding(Border.BorderThicknessProperty, new Binding("BorderThickness") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
+            border.SetBinding(Border.PaddingProperty, new Binding("Padding") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
+
+            FrameworkElementFactory cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            cp.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            border.AppendChild(cp);
+
+            template.VisualTree = border;
+
+            Trigger mouseOver = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            mouseOver.Setters.Add(new Setter(Button.OpacityProperty, 0.86));
+            template.Triggers.Add(mouseOver);
+
+            Trigger pressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            pressed.Setters.Add(new Setter(Button.OpacityProperty, 0.70));
+            template.Triggers.Add(pressed);
+
+            return template;
+        }
+
+        public static void StyleButton(Button btn, double cornerRadius) {
+            if (btn == null) return;
+            btn.Template = CreateButtonTemplate(cornerRadius);
+            btn.Cursor = Cursors.Hand;
+            btn.FocusVisualStyle = null;
         }
     }
 }

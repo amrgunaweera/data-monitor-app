@@ -52,6 +52,9 @@ namespace NetPulse.Controls {
         public InterfaceCardControl(InterfaceInfo info) {
             _info = info;
 
+            SnapsToDevicePixels = true;
+            UseLayoutRounding = true;
+
             BorderThickness = new Thickness(1);
             CornerRadius = new CornerRadius(14);
             Padding = new Thickness(18);
@@ -183,7 +186,6 @@ namespace NetPulse.Controls {
                 Text = _info.Description,
                 FontSize = 11,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 450,
                 Margin = new Thickness(0, 2, 0, 0)
             };
 
@@ -315,8 +317,9 @@ namespace NetPulse.Controls {
                     FontSize = 10,
                     FontWeight = FontWeights.SemiBold,
                     Cursor = System.Windows.Input.Cursors.Hand,
-                    Padding = new Thickness(0)
+                    Padding = new Thickness(6, 2, 6, 2)
                 };
+                Helpers.StyleButton(_viewHistoryLinkBtn, 6);
                 _viewHistoryLinkBtn.Click += delegate(object s, RoutedEventArgs e) {
                     if (RequestNavigateToHistory != null) {
                         RequestNavigateToHistory();

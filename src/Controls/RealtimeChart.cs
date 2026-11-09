@@ -30,7 +30,9 @@ namespace NetPulse.Controls {
         private readonly Typeface _typeface;
 
         public RealtimeChart() {
-            _typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            SnapsToDevicePixels = true;
+            UseLayoutRounding = true;
+            _typeface = new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI, sans-serif"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
             ClipToBounds = true;
 
             UpdateThemeBrushes();
