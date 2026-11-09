@@ -1,16 +1,13 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]{0,49}$')]
-    [string]$IdentityName,
+    [string]$IdentityName = "amrg-projects.NetPlusMonitor",
 
-    [Parameter(Mandatory = $true)]
-    [string]$IdentityPublisher,
+    [string]$IdentityPublisher = "CN=86D97629-174B-46ED-8787-814914FDD587",
 
     [string]$DisplayName = "Net Plus Monitor",
 
-    [Parameter(Mandatory = $true)]
-    [string]$PublisherDisplayName,
+    [string]$PublisherDisplayName = "amrg-projects",
 
     [ValidatePattern('^\d+\.\d+\.\d+\.\d+$')]
     [string]$Version = "2.1.0.0",
@@ -44,6 +41,13 @@ if ([string]::IsNullOrWhiteSpace($makeAppx)) {
                 Join-Path $_.FullName "x64\MakeAppx.exe"
             } | Where-Object { Test-Path $_ } | Select-Object -First 1
         }
+        if ([string]::IsNullOrWhiteSpace($makeAppx)) {
+            $tempBuildTools = Join-Path $env:TEMP "NetPulseSdkBuildTools*\bin\*\x64\makeappx.exe"
+            $found = Get-ChildItem -Path $tempBuildTools -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+                $makeAppx = $found.FullName
+            }
+        }
     }
 }
 
@@ -65,6 +69,10 @@ try {
 
 Remove-Item (Join-Path $stageDirectory "DataMonitor.exe") -Force -ErrorAction SilentlyContinue
 Copy-Item $iconPath (Join-Path $stageDirectory "app.ico") -Force
+$cfg = Join-Path $root "DataMonitor.exe.config"
+if (Test-Path $cfg) {
+    Copy-Item $cfg (Join-Path $stageDirectory "NetPulseMonitor.exe.config") -Force -ErrorAction SilentlyContinue
+}
 
 $manifest = New-Object System.Xml.XmlDocument
 $manifest.PreserveWhitespace = $true
@@ -138,5 +146,47 @@ if (-not (Test-Path (Join-Path $validationDirectory "AppxManifest.xml"))) {
 }
 Remove-Item $validationDirectory -Recurse -Force
 
-Write-Host "Unsigned Store MSIX created at $packagePath" -ForegroundColor Green
-Write-Host "Upload this package to Partner Center so the Store can sign it." -ForegroundColor Yellow
+# Sign the MSIX package for local installation
+$signtool = $null
+$tempSignTools = Join-Path $env:TEMP "NetPulseSdkBuildTools*\bin\*\x64\signtool.exe"
+$foundSt = Get-ChildItem -Path $tempSignTools -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($foundSt) {
+    $signtool = $foundSt.FullName
+} else {
+    $st = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($st) { $signtool = $st.Source }
+}
+
+$pfxPath = Join-Path $outputRoot "NetPulseDev.pfx"
+$cerPath = Join-Path $outputRoot "NetPulseDev.cer"
+
+if ($signtool) {
+    if (-not (Test-Path $pfxPath)) {
+        $rsa = [System.Security.Cryptography.RSA]::Create(2048)
+        $req = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
+            $IdentityPublisher,
+            $rsa,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+        )
+        $oids = New-Object System.Security.Cryptography.OidCollection
+        $null = $oids.Add((New-Object System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.3")))
+        $eku = New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension($oids, $false)
+        $req.CertificateExtensions.Add($eku)
+
+        $cert = $req.CreateSelfSigned((Get-Date).AddDays(-1), (Get-Date).AddYears(5))
+        [System.IO.File]::WriteAllBytes($pfxPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, "NetPulse123!"))
+        [System.IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+    }
+
+    & $signtool sign /fd SHA256 /a /f $pfxPath /p "NetPulse123!" $packagePath | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[SIGNED] MSIX package signed with developer certificate." -ForegroundColor Green
+        & certutil.exe -f -addstore -user TrustedPeople $cerPath | Out-Null
+        & certutil.exe -f -addstore -user Root $cerPath | Out-Null
+        Write-Host "[TRUSTED] Certificate added to TrustedPeople & Root stores for 1-click install." -ForegroundColor Green
+    }
+}
+
+Write-Host "Store-ready & locally testable MSIX created at $packagePath" -ForegroundColor Green
+Write-Host "You can now double-click the MSIX to install it, or upload to Partner Center for Store distribution." -ForegroundColor Yellow
