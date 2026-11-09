@@ -25,6 +25,7 @@ namespace NetPulse {
 
         public bool EnableVisitedSitesHistory { get; set; }
         public bool IncludeVisitedSitesInExport { get; set; }
+        public bool DisableHardwareAcceleration { get; set; }
 
         public SettingsData() {
             RunOnStartup = false;
@@ -44,6 +45,7 @@ namespace NetPulse {
 
             EnableVisitedSitesHistory = true;
             IncludeVisitedSitesInExport = true;
+            DisableHardwareAcceleration = false;
         }
     }
 
@@ -134,6 +136,11 @@ namespace NetPulse {
         public bool IncludeVisitedSitesInExport {
             get { return _data.IncludeVisitedSitesInExport; }
             set { _data.IncludeVisitedSitesInExport = value; }
+        }
+
+        public bool DisableHardwareAcceleration {
+            get { return _data.DisableHardwareAcceleration; }
+            set { _data.DisableHardwareAcceleration = value; }
         }
 
         public string SettingsFilePath {

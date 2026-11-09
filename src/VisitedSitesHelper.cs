@@ -208,7 +208,31 @@ namespace NetPulse {
             } catch {}
         }
 
+        private static readonly object _cacheLock = new object();
+        private static List<VisitedSiteRecord> _cachedSites = null;
+        private static DateTime _lastFetchTime = DateTime.MinValue;
+        private static TimeRangePreset _cachedPreset;
+        private static DateTime _cachedStartDate;
+        private static DateTime _cachedEndDate;
+
+        public static void InvalidateCache() {
+            lock (_cacheLock) {
+                _cachedSites = null;
+                _lastFetchTime = DateTime.MinValue;
+            }
+        }
+
         public static List<VisitedSiteRecord> GetVisitedSites(TimeRangePreset preset, DateTime startDate, DateTime endDate, int maxResults) {
+            lock (_cacheLock) {
+                if (_cachedSites != null &&
+                    _cachedPreset == preset &&
+                    _cachedStartDate == startDate &&
+                    _cachedEndDate == endDate &&
+                    (DateTime.Now - _lastFetchTime).TotalSeconds < 60) {
+                    return new List<VisitedSiteRecord>(_cachedSites);
+                }
+            }
+
             Dictionary<string, VisitedSiteRecord> uniqueByUrl = new Dictionary<string, VisitedSiteRecord>(StringComparer.OrdinalIgnoreCase);
 
             try {
@@ -266,6 +290,14 @@ namespace NetPulse {
 
             if (maxResults > 0 && result.Count > maxResults) {
                 result = result.GetRange(0, maxResults);
+            }
+
+            lock (_cacheLock) {
+                _cachedSites = new List<VisitedSiteRecord>(result);
+                _cachedPreset = preset;
+                _cachedStartDate = startDate;
+                _cachedEndDate = endDate;
+                _lastFetchTime = DateTime.Now;
             }
 
             return result;

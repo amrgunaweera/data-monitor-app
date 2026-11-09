@@ -18,6 +18,13 @@ namespace NetPulse {
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern uint RegisterWindowMessage(string lpString);
+
+        private static readonly uint WM_RESTORE_NETPULSE = RegisterWindowMessage(Program.RestoreMessageName);
+        private const int WM_SHOWWINDOW = 0x0018;
+        private const int WM_DWMCOMPOSITIONCHANGED = 0x031E;
+        private const int WM_DISPLAYCHANGE = 0x007E;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         private const int WM_SETTINGCHANGE = 0x001A;
@@ -190,6 +197,7 @@ namespace NetPulse {
         private CheckBox _startMinimizedCheck;
         private CheckBox _closeToTrayCheck;
         private CheckBox _alwaysOnTopCheck;
+        private CheckBox _disableGpuCheck;
 
         private ComboBox _pollingRateCombo;
         private ComboBox _unitModeCombo;
@@ -239,6 +247,14 @@ namespace NetPulse {
             _monitor = new NetworkMonitor();
             _cardControls = new Dictionary<string, InterfaceCardControl>();
 
+            Background = Helpers.BrushFromHex(ThemeManager.WindowBg);
+            RenderCapability.TierChanged += delegate {
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, (Action)delegate {
+                    InvalidateVisual();
+                    UpdateLayout();
+                });
+            };
+
             Loaded += OnWindowLoaded;
             Closing += OnWindowClosing;
 
@@ -261,6 +277,27 @@ namespace NetPulse {
             }
         }
 
+        public void RestoreAndBringToFront() {
+            try {
+                if (!IsVisible) {
+                    Show();
+                }
+                ShowInTaskbar = true;
+                Visibility = Visibility.Visible;
+                if (WindowState == WindowState.Minimized) {
+                    WindowState = WindowState.Normal;
+                }
+                Activate();
+                Topmost = true;
+                Topmost = AppSettings.Instance.AlwaysOnTop;
+                Focus();
+
+                // Force layout update and visual tree invalidation so WPF immediately repaints
+                InvalidateVisual();
+                UpdateLayout();
+            } catch {}
+        }
+
         private void SetupTrayIcon() {
             try {
                 _trayIcon = new System.Windows.Forms.NotifyIcon();
@@ -274,9 +311,7 @@ namespace NetPulse {
 
                 System.Windows.Forms.ContextMenu menu = new System.Windows.Forms.ContextMenu();
                 menu.MenuItems.Add("Show NetPulse", delegate(object s, EventArgs e) {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Activate();
+                    RestoreAndBringToFront();
                 });
                 menu.MenuItems.Add("Reset Session", delegate(object s, EventArgs e) {
                     _monitor.ResetSession();
@@ -290,9 +325,13 @@ namespace NetPulse {
                 _trayIcon.ContextMenu = menu;
 
                 _trayIcon.DoubleClick += delegate(object s, EventArgs e) {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Activate();
+                    RestoreAndBringToFront();
+                };
+
+                _trayIcon.MouseClick += delegate(object s, System.Windows.Forms.MouseEventArgs e) {
+                    if (e.Button == System.Windows.Forms.MouseButtons.Left) {
+                        RestoreAndBringToFront();
+                    }
                 };
             } catch {}
         }
@@ -305,9 +344,21 @@ namespace NetPulse {
                 source.AddHook(WndProc);
             }
 
-            OnTimerTick(null, null);
-            RefreshHistoryView();
-            RefreshSettingsView();
+            try {
+                OnTimerTick(null, null);
+            } catch {}
+
+            // Defer non-active tab refreshes so that Live Dashboard renders immediately with zero delay
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, (Action)delegate {
+                try {
+                    if (_currentTab == 1) {
+                        RefreshHistoryView();
+                    } else if (_currentTab == 2) {
+                        RefreshSettingsView();
+                    }
+                } catch {}
+            });
+
             if (AppSettings.Instance.StartMinimized) {
                 if (AppSettings.Instance.CloseToTray) {
                     Hide();
@@ -317,6 +368,9 @@ namespace NetPulse {
                 } else {
                     WindowState = WindowState.Minimized;
                 }
+            } else {
+                InvalidateVisual();
+                UpdateLayout();
             }
         }
 
@@ -342,7 +396,27 @@ namespace NetPulse {
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) {
-            if (msg == WM_SETTINGCHANGE) {
+            if (msg == (int)WM_RESTORE_NETPULSE) {
+                Dispatcher.BeginInvoke(DispatcherPriority.Normal, (Action)delegate {
+                    RestoreAndBringToFront();
+                });
+                handled = true;
+                return (IntPtr)1;
+            }
+
+            if (msg == WM_SHOWWINDOW) {
+                if (wParam != IntPtr.Zero) {
+                    Dispatcher.BeginInvoke(DispatcherPriority.Normal, (Action)delegate {
+                        RestoreAndBringToFront();
+                    });
+                }
+            } else if (msg == WM_DWMCOMPOSITIONCHANGED || msg == WM_DISPLAYCHANGE) {
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, (Action)delegate {
+                    UpdateTitleBar();
+                    InvalidateVisual();
+                    UpdateLayout();
+                });
+            } else if (msg == WM_SETTINGCHANGE) {
                 string area = Marshal.PtrToStringAuto(lParam);
                 if (area == "ImmersiveColorSet" || area == null) {
                     if (AppSettings.Instance.ThemePreference == "System") {
@@ -1797,6 +1871,14 @@ namespace NetPulse {
                 });
             sysSp.Children.Add(_alwaysOnTopCheck);
 
+            _disableGpuCheck = CreateSettingsCheckBox("Disable Hardware Acceleration (Software Rendering)",
+                "Use CPU software rendering if you experience black screens or graphics driver glitches (restart required)",
+                delegate(bool isChecked) {
+                    AppSettings.Instance.DisableHardwareAcceleration = isChecked;
+                    AppSettings.Instance.Save();
+                });
+            sysSp.Children.Add(_disableGpuCheck);
+
             systemCard.Child = sysSp;
             leftCol.Children.Add(systemCard);
 
@@ -2241,6 +2323,7 @@ namespace NetPulse {
             _startMinimizedCheck.IsChecked = settings.StartMinimized;
             _closeToTrayCheck.IsChecked = settings.CloseToTray;
             _alwaysOnTopCheck.IsChecked = settings.AlwaysOnTop;
+            if (_disableGpuCheck != null) _disableGpuCheck.IsChecked = settings.DisableHardwareAcceleration;
 
             if (settings.PollingIntervalSeconds <= 0.6) _pollingRateCombo.SelectedIndex = 0;
             else if (settings.PollingIntervalSeconds >= 1.8) _pollingRateCombo.SelectedIndex = 2;
@@ -3106,8 +3189,8 @@ namespace NetPulse {
 
             // Update quick history teaser
             DayUsageRecord todayRec = UsageStorage.Instance.GetTodayRecord();
-            PeriodUsageSummary weekSummary = UsageStorage.Instance.GetSummary(TimeRangePreset.Last7Days);
-            PeriodUsageSummary monthSummary = UsageStorage.Instance.GetSummary(TimeRangePreset.ThisMonth);
+            PeriodUsageSummary weekSummary = UsageStorage.Instance.GetSummary(TimeRangePreset.Last7Days, false);
+            PeriodUsageSummary monthSummary = UsageStorage.Instance.GetSummary(TimeRangePreset.ThisMonth, false);
 
             string curSsid = WifiNetworkHelper.GetCurrentWifiSsid();
             string wifiTeaser = !string.IsNullOrEmpty(curSsid) ? (" (📶 " + curSsid + ")") : "";

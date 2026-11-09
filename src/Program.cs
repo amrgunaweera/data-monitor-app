@@ -3,6 +3,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace NetPulse {
     public static class Program {
@@ -17,15 +19,35 @@ namespace NetPulse {
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern uint RegisterWindowMessage(string lpString);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        private const int ASFW_ANY = -1;
         private const int SW_RESTORE = 9;
         private const string WindowTitle = "NetPulse — Windows Network Data Monitor & History";
         private const string MutexId = "NetPulse_DataMonitor_SingleInstance_Mutex_9B8F2A";
+        public const string RestoreMessageName = "NetPulse_Restore_Window_9B8F2A";
 
         [STAThread]
         public static void Main() {
             // Ensure working directory is always application directory (critical when launched by Windows at logon)
             try {
                 Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
+            } catch {}
+
+            // Apply software rendering if hardware acceleration is disabled in user settings
+            try {
+                if (AppSettings.Instance.DisableHardwareAcceleration) {
+                    RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+                }
             } catch {}
 
             // Global exception logging to avoid silent exit during boot
@@ -54,8 +76,19 @@ namespace NetPulse {
 
         private static void BringExistingInstanceToFront() {
             try {
+                AllowSetForegroundWindow(ASFW_ANY);
+
+                uint msg = RegisterWindowMessage(RestoreMessageName);
+                if (msg != 0) {
+                    // HWND_BROADCAST (0xffff) guarantees reaching the running instance even if window handle differs
+                    PostMessage(new IntPtr(0xffff), msg, IntPtr.Zero, IntPtr.Zero);
+                }
+
                 IntPtr hWnd = FindWindow(null, WindowTitle);
                 if (hWnd != IntPtr.Zero) {
+                    if (msg != 0) {
+                        PostMessage(hWnd, msg, IntPtr.Zero, IntPtr.Zero);
+                    }
                     ShowWindow(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
                 }

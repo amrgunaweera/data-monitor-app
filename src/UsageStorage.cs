@@ -153,6 +153,10 @@ namespace NetPulse {
         }
 
         public PeriodUsageSummary GetSummary(TimeRangePreset preset) {
+            return GetSummary(preset, true);
+        }
+
+        public PeriodUsageSummary GetSummary(TimeRangePreset preset, bool includeVisitedSites) {
             DateTime start, end;
             string rangeLabel;
             GetDateRange(preset, out start, out end, out rangeLabel);
@@ -252,7 +256,7 @@ namespace NetPulse {
                 return b.TotalBytes.CompareTo(a.TotalBytes);
             });
 
-            if (AppSettings.Instance.EnableVisitedSitesHistory) {
+            if (includeVisitedSites && AppSettings.Instance.EnableVisitedSitesHistory) {
                 try {
                     List<VisitedSiteRecord> sites = VisitedSitesHelper.GetVisitedSites(preset, start, end, 500);
                     Dictionary<string, VisitedSiteRecord> map = new Dictionary<string, VisitedSiteRecord>(StringComparer.OrdinalIgnoreCase);
